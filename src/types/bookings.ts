@@ -3,45 +3,39 @@
 export interface Booking {
   id?: string;
   
-  // Booking Information
+  // Core booking fields in the exact order you specified
   bookingConfirmationDate: Date;
-  coastrReference: string;
-  accountsInvoiceRef?: string;
   supplier?: string;
-  supplierRef?: string;
-  
-  // Customer Information
+  reference?: string; // This is supplierRef
+  coastrReference: string;
+  sageInv?: string; // This is accountsInvoiceRef
+  notes?: string;
   customerName: string;
   phoneNumber: string;
-  additionalDriverCollected?: number;
-  
-  // Vehicle & Rental Details
-  vehicleGroup?: string;
+  group?: string; // This is vehicleGroup
   registration: string;
-  make?: string; // Auto-filled from fleet
-  model?: string; // Auto-filled from fleet
-  noOfDays?: number; // Auto-calculated
-  pickupDate: Date;
-  pickupTime: string;
-  dropoffDate: Date;
-  dropoffTime: string;
-  pickupLocation: string;
-  dropoffLocation: string;
-  
-  // Financial Information
-  depositBlocked?: string; // Changed to string for Yes/No
+  makeModel?: string; // Combined make & model for display
+  make?: string; // Separate for data storage
+  model?: string; // Separate for data storage
+  pickUpDate: Date;
+  pickUpTime: string;
+  pickUpLocation: string;
+  dropOffDate: Date;
+  dropOffTime: string;
+  dropOffLocation: string;
+  noOfDays?: number;
   hireChargeInclVat?: number;
   insurance?: number;
-  additionalHoursDays?: number;
-  additionalRentalCollected?: number;
-  cdwStandardPremiumCollected?: string; // Changed to string for dropdown
-  depositToBeCollected?: number;
-  damageCharge?: number;
-  additionalCharges?: number;
+  additionalIncome?: number;
+  additionalIncomeReason?: string;
+  extras?: number;
+  extrasType?: string;
+  depositToBeCollectedAtBranch?: number;
+  depositToBeCollectedStatus?: 'Yes' | 'No'; // Green/Red status
+  chargesIncome?: number;
   paidToUs?: number;
-  depositReturnedDate?: Date | null;
-  
-  // Additional Information
+  deposit?: number;
+  returnedDate?: Date | string | null; // Allow both date and text for legacy data
   comments?: string;
   
   // System fields
@@ -53,34 +47,35 @@ export interface Booking {
 
 export interface BookingFormData {
   bookingConfirmationDate: string;
-  coastrReference: string;
-  accountsInvoiceRef: string;
   supplier: string;
-  supplierRef: string;
+  reference: string; // supplierRef
+  coastrReference: string;
+  sageInv: string; // accountsInvoiceRef
+  notes: string;
   customerName: string;
   phoneNumber: string;
-  additionalDriverCollected: string;
-  vehicleGroup: string;
+  group: string; // vehicleGroup
   registration: string;
   make: string;
   model: string;
-  pickupDate: string;
-  pickupTime: string;
-  dropoffDate: string;
-  dropoffTime: string;
-  pickupLocation: string;
-  dropoffLocation: string;
-  depositBlocked: string;
+  pickUpDate: string;
+  pickUpTime: string;
+  pickUpLocation: string;
+  dropOffDate: string;
+  dropOffTime: string;
+  dropOffLocation: string;
   hireChargeInclVat: string;
   insurance: string;
-  additionalHoursDays: string;
-  additionalRentalCollected: string;
-  cdwStandardPremiumCollected: string;
-  depositToBeCollected: string;
-  damageCharge: string;
-  additionalCharges: string;
+  additionalIncome: string;
+  additionalIncomeReason: string;
+  extras: string;
+  extrasType: string;
+  depositToBeCollectedAtBranch: string;
+  depositToBeCollectedStatus: string;
+  chargesIncome: string;
   paidToUs: string;
-  depositReturnedDate: string;
+  deposit: string;
+  returnedDate: string; // Allow text input
   comments: string;
 }
 
