@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { Booking, BookingFormData } from '@/types/bookings';
 import { BookingService } from '@/services/bookingService';
 import { VehicleService } from '@/services/vehicleService';
+import { useBookingAutoCalculation } from '@/hooks/useBookingAutoCalculation';
 import toast from 'react-hot-toast';
 
 interface BookingFormProps {
@@ -61,7 +62,6 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
       depositToBeCollectedStatus: booking?.depositToBeCollectedStatus || '',
       chargesIncome: booking?.chargesIncome?.toString() || '',
       paidToUs: booking?.paidToUs?.toString() || '',
-      deposit: booking?.deposit?.toString() || '',
       returnedDate: booking?.returnedDate ? 
         (typeof booking.returnedDate === 'string' ? 
           booking.returnedDate : 
@@ -70,17 +70,31 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
     }
   });
 
-  // Watch form values for calculations and auto-fill
+  // Watch form values
   const registration = watch('registration');
   const pickUpDate = watch('pickUpDate');
   const dropOffDate = watch('dropOffDate');
-  
-  // Watch financial fields for auto-calculation of "Paid To Us" (EXCLUDING ALL DEPOSITS)
   const hireChargeInclVat = watch('hireChargeInclVat');
   const insurance = watch('insurance');
   const additionalIncome = watch('additionalIncome');
   const extras = watch('extras');
   const chargesIncome = watch('chargesIncome');
+
+  // Use auto-calculation hook
+  const {
+    loading: autoCalculating,
+    vehicleInfo,
+    pricing,
+    error: calculationError,
+    recalculate,
+    getCalculationSummary
+  } = useBookingAutoCalculation({
+    registration,
+    pickUpDate,
+    dropOffDate,
+    setValue,
+    getValues
+  });
 
   // Auto-calculate "Paid To Us" from revenue fields only (NO DEPOSITS)
   useEffect(() => {
@@ -90,7 +104,6 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
       additionalIncome,
       extras,
       chargesIncome
-      // NOTE: NO deposits included - they all get refunded
     ];
     
     const total = fields.reduce((sum, field) => {
@@ -101,40 +114,24 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
     setValue('paidToUs', total > 0 ? total.toFixed(2) : '');
   }, [hireChargeInclVat, insurance, additionalIncome, extras, chargesIncome, setValue]);
 
-  // Auto-fill vehicle details when registration changes
-  useEffect(() => {
-    if (registration && registration.length >= 3) {
-      const searchVehicle = async () => {
-        try {
-          const vehicles = await VehicleService.searchVehicles(registration);
-          setVehicleSuggestions(vehicles);
-          setShowSuggestions(vehicles.length > 0);
-          
-          // Auto-fill if exact match found
-          const exactMatch = vehicles.find(v => 
-            v.registration.toLowerCase() === registration.toLowerCase()
-          );
-          
-          if (exactMatch && !getValues('make')) {
-            setValue('make', exactMatch.make || '');
-            setValue('model', exactMatch.model || '');
-          }
-        } catch (error) {
-          console.error('Error searching vehicles:', error);
-        }
-      };
-      
-      searchVehicle();
-    } else {
-      setShowSuggestions(false);
-    }
-  }, [registration, setValue, getValues]);
-
+  // Handle vehicle selection from dropdown
   const selectVehicle = (vehicle: any) => {
     setValue('registration', vehicle.registration);
-    setValue('make', vehicle.make || '');
-    setValue('model', vehicle.model || '');
     setShowSuggestions(false);
+  };
+
+  // Calculate number of days between dates (allow same-day rentals)
+  const calculateDays = (startDate: string, endDate: string): number => {
+    if (!startDate || !endDate) return 0;
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // Allow same-day rentals - minimum 1 day
+    const diffTime = end.getTime() - start.getTime();
+    const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+    
+    return diffDays;
   };
 
   const onSubmit = async (data: BookingFormData) => {
@@ -168,14 +165,14 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
         extras: data.extras ? parseFloat(data.extras) : undefined,
         extrasType: data.extrasType || undefined,
         depositToBeCollectedAtBranch: data.depositToBeCollectedAtBranch ? parseFloat(data.depositToBeCollectedAtBranch) : undefined,
-        depositToBeCollectedStatus: data.depositToBeCollectedStatus as 'Yes' | 'No' || undefined,
+        depositToBeCollectedStatus: data.depositToBeCollectedStatus as 'Yes' | 'No' | undefined,
         chargesIncome: data.chargesIncome ? parseFloat(data.chargesIncome) : undefined,
         paidToUs: data.paidToUs ? parseFloat(data.paidToUs) : undefined,
-        deposit: data.deposit ? parseFloat(data.deposit) : undefined,
-        returnedDate: data.returnedDate || null,
+        returnedDate: data.returnedDate || undefined,
         comments: data.comments || undefined,
-        createdBy: booking?.createdBy || 'user',
-        lastModifiedBy: 'user'
+        createdBy: 'system',
+        lastModifiedBy: 'system',
+        noOfDays: calculateDays(data.pickUpDate, data.dropOffDate)
       };
 
       if (booking?.id) {
@@ -188,18 +185,20 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
       
       onSuccess();
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save booking';
       toast.error(errorMessage);
-      console.error('Error saving booking:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const calculationSummary = getCalculationSummary();
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="p-6 border-b border-gray-200">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[95vh] overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-bold text-gray-900">
               {booking ? 'Edit Booking' : 'Add New Booking'}
@@ -217,6 +216,42 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-8">
+          {/* Auto-calculation Status */}
+          {(autoCalculating || calculationSummary) && (
+            <div className={`p-4 rounded-lg border ${
+              autoCalculating 
+                ? 'bg-blue-50 border-blue-200'
+                : 'bg-green-50 border-green-200'
+            }`}>
+              {autoCalculating && (
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span className="text-sm text-blue-800">
+                    Looking up vehicle group and calculating pricing...
+                  </span>
+                </div>
+              )}
+              
+              {calculationSummary && !autoCalculating && (
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-green-800">
+                    <span className="font-medium">✅ Auto-calculated:</span> {calculationSummary.calculation}
+                    <div className="text-xs text-green-600 mt-1">
+                      Vehicle: {calculationSummary.vehicle} | Group: {calculationSummary.group}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={recalculate}
+                    className="text-xs text-blue-600 hover:text-blue-700 underline"
+                  >
+                    Recalculate
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Booking Information Section */}
           <div className="bg-blue-50 p-6 rounded-lg">
             <h3 className="text-lg font-semibold text-blue-900 mb-4">📋 Booking Information</h3>
@@ -249,7 +284,7 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                 />
               </div>
 
-              {/* Reference (Supplier Ref) */}
+              {/* Reference */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Reference
@@ -349,6 +384,11 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
               <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Registration *
+                  {autoCalculating && (
+                    <span className="ml-2 text-xs text-blue-600">
+                      <span className="animate-spin inline-block">⏳</span> Auto-updating...
+                    </span>
+                  )}
                 </label>
                 <input
                   type="text"
@@ -380,6 +420,26 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                 )}
               </div>
 
+              {/* Group (Auto-populated) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Vehicle Group
+                  {autoCalculating && (
+                    <span className="ml-2 text-xs text-blue-600">Auto-updating...</span>
+                  )}
+                </label>
+                <input
+                  type="text"
+                  {...register('group')}
+                  placeholder="Auto-populated from settings"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50"
+                  readOnly
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Automatically filled based on vehicle assignment in settings
+                </p>
+              </div>
+
               {/* Make */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -388,7 +448,7 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                 <input
                   type="text"
                   {...register('make')}
-                  placeholder="e.g., Ford, BMW"
+                  placeholder="e.g., Ford"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
               </div>
@@ -401,192 +461,173 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                 <input
                   type="text"
                   {...register('model')}
-                  placeholder="e.g., Focus, 3 Series"
+                  placeholder="e.g., Transit"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                 />
-              </div>
-
-              {/* Group - MOVED HERE FROM CUSTOMER SECTION */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vehicle Group
-                </label>
-                <select
-                  {...register('group')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value="">Select group</option>
-                  <option value="Economy">Economy</option>
-                  <option value="Compact">Compact</option>
-                  <option value="Intermediate">Intermediate</option>
-                  <option value="Standard">Standard</option>
-                  <option value="Full Size">Full Size</option>
-                  <option value="Premium">Premium</option>
-                  <option value="Luxury">Luxury</option>
-                  <option value="SUV">SUV</option>
-                  <option value="Van">Van</option>
-                </select>
               </div>
             </div>
           </div>
 
-          {/* Rental Details Section */}
-          <div className="bg-yellow-50 p-6 rounded-lg">
-            <h3 className="text-lg font-semibold text-yellow-900 mb-4">📅 Rental Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Pick Up Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Pick Up Date *
-                </label>
-                <input
-                  type="date"
-                  {...register('pickUpDate', { required: 'Pick up date is required' })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-                {errors.pickUpDate && (
-                  <p className="text-red-500 text-xs mt-1">{errors.pickUpDate.message}</p>
-                )}
+          {/* Rental Period Section */}
+          <div className="bg-orange-50 p-6 rounded-lg">
+            <h3 className="text-lg font-semibold text-orange-900 mb-4">📅 Rental Period</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Pick Up Details */}
+              <div className="space-y-4">
+                <h4 className="font-medium text-orange-800">Pick Up</h4>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pick Up Date *
+                  </label>
+                  <input
+                    type="date"
+                    {...register('pickUpDate', { required: 'Pick up date is required' })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  {errors.pickUpDate && (
+                    <p className="text-red-500 text-xs mt-1">{errors.pickUpDate.message}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pick Up Time
+                  </label>
+                  <input
+                    type="time"
+                    {...register('pickUpTime')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Pick Up Location
+                  </label>
+                  <input
+                    type="text"
+                    {...register('pickUpLocation')}
+                    placeholder="e.g., Depot A, Terminal 1"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
               </div>
 
-              {/* Pick Up Time */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Pick Up Time
-                </label>
-                <select
-                  {...register('pickUpTime')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                >
-                  <option value="">Select time</option>
-                  {Array.from({ length: 24 }, (_, hour) =>
-                    ['00', '15', '30', '45'].map(minute => {
-                      const time = `${hour.toString().padStart(2, '0')}:${minute}`;
-                      return (
-                        <option key={time} value={time}>
-                          {time}
-                        </option>
-                      );
-                    })
-                  ).flat()}
-                </select>
-              </div>
+              {/* Drop Off Details */}
+              <div className="space-y-4">
+                <h4 className="font-medium text-orange-800">Drop Off</h4>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Drop Off Date *
+                  </label>
+                  <input
+                    type="date"
+                    {...register('dropOffDate', { required: 'Drop off date is required' })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  {errors.dropOffDate && (
+                    <p className="text-red-500 text-xs mt-1">{errors.dropOffDate.message}</p>
+                  )}
+                </div>
 
-              {/* Drop Off Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Drop Off Date *
-                </label>
-                <input
-                  type="date"
-                  {...register('dropOffDate', { required: 'Drop off date is required' })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-                {errors.dropOffDate && (
-                  <p className="text-red-500 text-xs mt-1">{errors.dropOffDate.message}</p>
-                )}
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Drop Off Time
+                  </label>
+                  <input
+                    type="time"
+                    {...register('dropOffTime')}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
 
-              {/* Drop Off Time */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Drop Off Time
-                </label>
-                <select
-                  {...register('dropOffTime')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                >
-                  <option value="">Select time</option>
-                  {Array.from({ length: 24 }, (_, hour) =>
-                    ['00', '15', '30', '45'].map(minute => {
-                      const time = `${hour.toString().padStart(2, '0')}:${minute}`;
-                      return (
-                        <option key={time} value={time}>
-                          {time}
-                        </option>
-                      );
-                    })
-                  ).flat()}
-                </select>
-              </div>
-
-              {/* Pick Up Location */}
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Pick Up Location *
-                </label>
-                <input
-                  type="text"
-                  {...register('pickUpLocation', { required: 'Pick up location is required' })}
-                  placeholder="e.g., London Heathrow Airport"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-                {errors.pickUpLocation && (
-                  <p className="text-red-500 text-xs mt-1">{errors.pickUpLocation.message}</p>
-                )}
-              </div>
-
-              {/* Drop Off Location */}
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Drop Off Location *
-                </label>
-                <input
-                  type="text"
-                  {...register('dropOffLocation', { required: 'Drop off location is required' })}
-                  placeholder="e.g., London Heathrow Airport"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-                {errors.dropOffLocation && (
-                  <p className="text-red-500 text-xs mt-1">{errors.dropOffLocation.message}</p>
-                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Drop Off Location
+                  </label>
+                  <input
+                    type="text"
+                    {...register('dropOffLocation')}
+                    placeholder="e.g., Depot A, Terminal 1"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
               </div>
             </div>
+
+            {/* Rental Period Summary */}
+            {pickUpDate && dropOffDate && (
+              <div className="mt-4 p-4 bg-orange-100 rounded-lg">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm font-medium text-orange-800">
+                    Rental Period: {calculateDays(pickUpDate, dropOffDate)} days
+                  </span>
+                  {vehicleInfo?.group && (
+                    <span className="text-sm text-orange-700">
+                      Group: <span className="font-medium">{vehicleInfo.group.name}</span>
+                      <span className="ml-2 text-orange-600">
+                        (£{vehicleInfo.group.dailyRate}/day)
+                      </span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Financial Information Section */}
-          <div className="bg-red-50 p-6 rounded-lg">
-            <h3 className="text-lg font-semibold text-red-900 mb-4">💰 Financial Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Hire Charge incl Vat */}
+          <div className="bg-yellow-50 p-6 rounded-lg">
+            <h3 className="text-lg font-semibold text-yellow-900 mb-4">💰 Financial Information</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {/* Hire Charge (Auto-calculated) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hire Charge incl Vat (£)
+                  Hire Charge (Inc. VAT) *
+                  <span className="text-xs text-blue-600 ml-1">(Auto-calculated)</span>
                 </label>
                 <input
                   type="number"
                   step="0.01"
-                  {...register('hireChargeInclVat')}
+                  {...register('hireChargeInclVat', { required: 'Hire charge is required' })}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
+                {errors.hireChargeInclVat && (
+                  <p className="text-red-500 text-xs mt-1">{errors.hireChargeInclVat.message}</p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Automatically calculated from group daily rate × number of days
+                </p>
               </div>
 
               {/* Insurance */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Insurance (£)
+                  Insurance
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   {...register('insurance')}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
               </div>
 
-              {/* Additional Income Amount */}
+              {/* Additional Income */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Additional Income (£)
+                  Additional Income
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   {...register('additionalIncome')}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
               </div>
 
@@ -598,22 +639,22 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                 <input
                   type="text"
                   {...register('additionalIncomeReason')}
-                  placeholder="e.g., Additional driver fee"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  placeholder="Reason for additional charge"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
               </div>
 
-              {/* Extras Amount */}
+              {/* Extras */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Extras (£)
+                  Extras
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   {...register('extras')}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
               </div>
 
@@ -626,88 +667,77 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                   type="text"
                   {...register('extrasType')}
                   placeholder="e.g., GPS, Child seat"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
               </div>
 
-              {/* Deposit TO BE Collected @ Branch Amount */}
+              {/* Deposit To Be Collected At Branch */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Deposit @ Branch (£)
+                  Deposit To Be Collected At Branch
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   {...register('depositToBeCollectedAtBranch')}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
               </div>
 
-              {/* Deposit TO BE Collected Status */}
+              {/* Deposit Status */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Deposit Status
                 </label>
                 <select
                   {...register('depositToBeCollectedStatus')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 >
                   <option value="">Select status</option>
-                  <option value="Yes" className="text-green-600">Yes (Collected)</option>
-                  <option value="No" className="text-red-600">No (Not Collected)</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
                 </select>
               </div>
 
               {/* Charges Income */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Charges Income (£)
+                  Charges Income
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   {...register('chargesIncome')}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
               </div>
 
               {/* Paid To Us (Auto-calculated) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Paid To Us (£) 
-                  <span className="text-xs text-blue-600">(Auto-calculated)</span>
+                  Paid To Us
+                  <span className="text-xs text-blue-600 ml-1">(Auto-calculated)</span>
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   {...register('paidToUs')}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md bg-blue-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-gray-50"
                   readOnly
                 />
-              </div>
-
-              {/* Deposit Returned Date - ONLY THE DATE FIELD */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Deposit Returned Date
-                  <span className="text-xs text-gray-500">(Date or text)</span>
-                </label>
-                <input
-                  type="text"
-                  {...register('returnedDate')}
-                  placeholder="DD/MM/YYYY or text note"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Sum of all income fields (excluding deposits)
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Additional Comments */}
+          {/* Comments Section */}
           <div className="bg-gray-50 p-6 rounded-lg">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">💬 Comments</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">💬 Additional Comments</h3>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Comments
@@ -715,26 +745,25 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
               <textarea
                 {...register('comments')}
                 rows={3}
-                placeholder="Additional comments or notes..."
+                placeholder="Any additional notes or comments about this booking..."
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
               />
             </div>
           </div>
 
-          {/* Form Actions */}
-          <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+          {/* Action Buttons */}
+          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
             <button
               type="button"
               onClick={onCancel}
-              className="px-6 py-3 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
-              disabled={isLoading}
+              className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-6 py-3 text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={isLoading}
+              className="px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium"
             >
               {isLoading ? (
                 <div className="flex items-center">

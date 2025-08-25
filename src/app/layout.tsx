@@ -1,35 +1,26 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
+// src/app/layout.tsx
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+import './globals.css';
+import Navigation from '@/components/Navigation';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-export const metadata: Metadata = {
-  title: "Fleet Management System",
-  description: "Manage your vehicle fleet efficiently",
+export const metadata = {
+  title: 'CoastR Manager',
+  description: 'Fleet and booking management system',
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
-      <head>
-      </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
+      <body className="bg-gray-50">
+        <ErrorBoundary>
+          <Navigation />
+          <main>{children}</main>
+        </ErrorBoundary>
       </body>
     </html>
   );

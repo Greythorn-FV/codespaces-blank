@@ -9,8 +9,7 @@ import { BookingExcelUtils } from '@/utils/bookingExcelUtils';
 import BookingForm from '@/components/BookingForm';
 import BookingTable from '@/components/BookingTable';
 import BookingBulkUploadModal from '@/components/BookingBulkUploadModal';
-import NextDayOperationsModal from '@/components/NextDayOperationsModal';
-import SearchAndControls from '@/components/SearchAndControls';
+import DepositReturnedModal from '@/components/DepositReturnedModal';
 import toast, { Toaster } from 'react-hot-toast';
 import { DocumentSnapshot } from 'firebase/firestore';
 
@@ -22,8 +21,9 @@ export default function BookingsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
-  const [showNextDayOperations, setShowNextDayOperations] = useState(false);
+  const [showDepositModal, setShowDepositModal] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
+  const [depositBooking, setDepositBooking] = useState<Booking | null>(null);
   const [sortField, setSortField] = useState<keyof Booking>('bookingConfirmationDate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [viewMode, setViewMode] = useState<'summary' | 'detailed'>('summary');
@@ -84,40 +84,77 @@ export default function BookingsPage() {
     }
   };
 
-  // Clear search
-  const handleClearSearch = () => {
-    setSearchTerm('');
+  // Download template
+  const handleDownloadTemplate = () => {
+    const blob = BookingExcelUtils.generateTemplate();
+    BookingExcelUtils.downloadFile(blob, 'booking_template.xlsx');
+    toast.success('Template downloaded successfully');
+  };
+
+  // Export bookings
+  const handleExport = async () => {
+    try {
+      const allBookings = bookings;
+      const blob = BookingExcelUtils.exportBookingsToExcel(allBookings);
+      BookingExcelUtils.downloadFile(blob, `bookings_${new Date().toISOString().split('T')[0]}.xlsx`);
+      toast.success('Bookings exported successfully');
+    } catch (error) {
+      toast.error('Failed to export bookings');
+      console.error(error);
+    }
+  };
+
+  // Delete booking
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this booking?')) return;
+
+    try {
+      await BookingService.deleteBooking(id);
+      toast.success('Booking deleted successfully');
+      setLastDoc(null);
+      loadBookings(true);
+    } catch (error) {
+      toast.error('Failed to delete booking');
+      console.error(error);
+    }
+  };
+
+  // Handle deposit returned
+  const handleDepositReturned = (booking: Booking) => {
+    setDepositBooking(booking);
+    setShowDepositModal(true);
+  };
+
+  // Handle form success
+  const handleFormSuccess = () => {
+    setShowAddForm(false);
+    setEditingBooking(null);
     setLastDoc(null);
     loadBookings(true);
   };
 
-  // Export all bookings to Excel
-  const handleExportAllBookings = async () => {
-    try {
-      setLoading(true);
-      toast.loading('Preparing Excel export...', { id: 'export-loading' });
-      
-      // Get ALL bookings from database (not just the displayed ones)
-      const allBookings = await BookingService.getAllBookingsForExport();
-      
-      if (allBookings.length === 0) {
-        toast.error('No bookings to export', { id: 'export-loading' });
-        return;
-      }
-      
-      // Generate Excel file with ALL columns
-      const excelBlob = BookingExcelUtils.exportBookingsToExcel(allBookings);
-      const filename = BookingExcelUtils.generateFilename('all_bookings');
-      
-      // Download the file
-      BookingExcelUtils.downloadFile(excelBlob, filename);
-      
-      toast.success(`Successfully exported ${allBookings.length} bookings to Excel`, { id: 'export-loading' });
-    } catch (error) {
-      toast.error('Failed to export bookings to Excel', { id: 'export-loading' });
-      console.error('Export error:', error);
-    } finally {
-      setLoading(false);
+  // Handle bulk upload success
+  const handleBulkUploadSuccess = () => {
+    setShowBulkUpload(false);
+    setLastDoc(null);
+    loadBookings(true);
+  };
+
+  // Handle deposit modal success
+  const handleDepositModalSuccess = () => {
+    setShowDepositModal(false);
+    setDepositBooking(null);
+    setLastDoc(null);
+    loadBookings(true);
+  };
+
+  // Handle sort
+  const handleSort = (field: keyof Booking) => {
+    if (field === sortField) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
     }
   };
 
@@ -149,103 +186,45 @@ export default function BookingsPage() {
     }
   };
 
-  // Delete booking
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this booking?')) return;
-
-    try {
-      await BookingService.deleteBooking(id);
-      toast.success('Booking deleted successfully');
-      setLastDoc(null);
-      loadBookings(true);
-    } catch (error) {
-      toast.error('Failed to delete booking');
-      console.error(error);
-    }
-  };
-
-  // Handle form success
-  const handleFormSuccess = () => {
-    setShowAddForm(false);
-    setEditingBooking(null);
-    setLastDoc(null);
-    loadBookings(true);
-  };
-
-  // Handle bulk upload success
-  const handleBulkUploadSuccess = () => {
-    setShowBulkUpload(false);
-    setLastDoc(null);
-    loadBookings(true);
-  };
-
-  // Handle sort
-  const handleSort = (field: keyof Booking) => {
-    if (field === sortField) {
-      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
-      <Toaster 
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: '#363636',
-            color: '#fff',
-          },
-        }}
-      />
-
-      {/* Header Section */}
-      <div className="bg-white shadow-sm border-b border-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50">
+      <Toaster position="top-right" />
+      
+      {/* Header */}
+      <div className="bg-white shadow-lg border-b border-gray-100">
         <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-4xl font-bold text-gray-900">📋 Bookings Management</h1>
-              <p className="text-lg text-gray-600 mt-2">
-                Manage your car rental bookings with complete financial tracking
-              </p>
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                Bookings Management
+              </h1>
+              <p className="text-gray-600 mt-2">Manage your vehicle bookings efficiently</p>
             </div>
-            
-            {/* Action Buttons */}
-            <div className="flex flex-wrap gap-3">
+            <div className="flex space-x-3">
               <button
-                onClick={() => setShowNextDayOperations(true)}
-                className="px-4 py-2 text-amber-700 bg-amber-100 border border-amber-200 rounded-lg hover:bg-amber-200 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-sm transition-all duration-200 flex items-center space-x-2"
+                onClick={handleDownloadTemplate}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition-all duration-200 flex items-center space-x-2"
               >
-                <span>📅</span>
-                <span>Next Day's Operations</span>
+                <span>📥</span>
+                <span>Download Template</span>
               </button>
               <button
                 onClick={() => setShowBulkUpload(true)}
-                className="px-4 py-2 text-purple-700 bg-purple-100 border border-purple-200 rounded-lg hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm transition-all duration-200 flex items-center space-x-2"
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition-all duration-200 flex items-center space-x-2"
               >
                 <span>📤</span>
                 <span>Bulk Upload</span>
               </button>
               <button
-                onClick={handleExportAllBookings}
-                className="px-4 py-2 text-green-700 bg-green-100 border border-green-200 rounded-lg hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-green-500 shadow-sm transition-all duration-200 flex items-center space-x-2"
+                onClick={handleExport}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition-all duration-200 flex items-center space-x-2"
               >
                 <span>📊</span>
-                <span>Export to Excel</span>
-              </button>
-              <button
-                onClick={handleClearAll}
-                className="px-4 py-2 text-white bg-red-500 border border-red-600 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 shadow-sm transition-all duration-200 flex items-center space-x-2"
-              >
-                <span>🗑️</span>
-                <span>Clear All</span>
+                <span>Export</span>
               </button>
               <button
                 onClick={() => setShowAddForm(true)}
-                className="px-6 py-2 text-white bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg hover:from-blue-600 hover:to-indigo-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-lg transition-all duration-200 flex items-center space-x-2 font-medium"
+                className="px-6 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md transition-all duration-200 font-medium flex items-center space-x-2"
               >
                 <span>➕</span>
                 <span>Add Booking</span>
@@ -255,54 +234,136 @@ export default function BookingsPage() {
         </div>
       </div>
 
-      {/* Search and Controls */}
-      <SearchAndControls 
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-        onSearch={handleSearch}
-        onClearSearch={handleClearSearch}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-      />
+      {/* Controls */}
+      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+          {/* Search and View Toggle */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 mb-4">
+            <div className="flex items-center space-x-4 flex-1">
+              <div className="flex-1 relative max-w-md">
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  placeholder="Search bookings..."
+                  className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
+                />
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <span className="text-gray-400">🔍</span>
+                </div>
+              </div>
+              <button
+                onClick={handleSearch}
+                className="px-6 py-3 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md transition-all duration-200 font-medium"
+              >
+                Search
+              </button>
+              {searchTerm && (
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setLastDoc(null);
+                    loadBookings(true);
+                  }}
+                  className="px-4 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-all duration-200 font-medium"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
 
-      {/* Bookings Table */}
-      <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 pb-8">
-        {loading && bookings.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-lg p-8">
-            <div className="flex flex-col items-center justify-center space-y-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
-              <p className="text-gray-600">Loading bookings...</p>
+            {/* View Mode Toggle */}
+            <div className="flex bg-gray-100 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('summary')}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                  viewMode === 'summary'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Summary
+              </button>
+              <button
+                onClick={() => setViewMode('detailed')}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 ${
+                  viewMode === 'detailed'
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Detailed
+              </button>
             </div>
           </div>
+
+          {/* Statistics */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-blue-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-blue-600">{bookings.length}</div>
+              <div className="text-sm text-blue-600">Total Bookings</div>
+            </div>
+            <div className="bg-green-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-green-600">
+                £{bookings.reduce((sum, b) => sum + (b.paidToUs || 0), 0).toFixed(2)}
+              </div>
+              <div className="text-sm text-green-600">Total Revenue</div>
+            </div>
+            <div className="bg-purple-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-purple-600">
+                {bookings.filter(b => b.returnedDate).length}
+              </div>
+              <div className="text-sm text-purple-600">Deposits Returned</div>
+            </div>
+            <div className="bg-orange-50 rounded-lg p-4">
+              <div className="text-2xl font-bold text-orange-600">
+                {bookings.filter(b => !b.returnedDate && b.depositToBeCollectedAtBranch && b.depositToBeCollectedAtBranch > 0).length}
+              </div>
+              <div className="text-sm text-orange-600">Deposits pending Return</div>
+            </div>
+          </div>
+
+          {/* Advanced Actions */}
+          <div className="flex justify-end mt-4">
+            <button
+              onClick={handleClearAll}
+              className="px-4 py-2 text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-200 text-sm font-medium"
+            >
+              Clear All Bookings
+            </button>
+          </div>
+        </div>
+
+        {/* Main Content */}
+        {loading && bookings.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <p className="mt-2 text-gray-600">Loading bookings...</p>
+          </div>
         ) : bookings.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-lg p-8">
-            <div className="text-center">
-              <div className="mx-auto h-24 w-24 text-gray-400 mb-4">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-medium text-gray-900 mb-2">No bookings found</h3>
-              <p className="text-gray-500 mb-6">
-                {searchTerm 
-                  ? `No bookings match "${searchTerm}". Try a different search term.`
-                  : "Get started by adding your first booking or uploading bulk data."
-                }
-              </p>
-              <div className="flex justify-center space-x-3">
-                <button
-                  onClick={() => setShowAddForm(true)}
-                  className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                >
-                  Add First Booking
-                </button>
-                <button
-                  onClick={() => setShowBulkUpload(true)}
-                  className="px-6 py-3 bg-purple-100 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
-                >
-                  Bulk Upload
-                </button>
-              </div>
+          <div className="text-center py-12 bg-white rounded-lg shadow">
+            <div className="text-6xl mb-4">📅</div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No Bookings Found</h3>
+            <p className="text-gray-600 mb-6">
+              {searchTerm.trim() 
+                ? `No bookings match "${searchTerm}". Try a different search term.`
+                : "Get started by adding your first booking or uploading bulk data."
+              }
+            </p>
+            <div className="flex justify-center space-x-3">
+              <button
+                onClick={() => setShowAddForm(true)}
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+              >
+                Add First Booking
+              </button>
+              <button
+                onClick={() => setShowBulkUpload(true)}
+                className="px-6 py-3 bg-purple-100 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
+              >
+                Bulk Upload
+              </button>
             </div>
           </div>
         ) : (
@@ -311,6 +372,7 @@ export default function BookingsPage() {
               bookings={bookings}
               onEdit={setEditingBooking}
               onDelete={handleDelete}
+              onDepositReturned={handleDepositReturned}
               onSort={handleSort}
               sortField={sortField}
               sortDirection={sortDirection}
@@ -325,43 +387,27 @@ export default function BookingsPage() {
                   disabled={loading}
                   className="px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                 >
-                  {loading ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-                      Loading...
-                    </div>
-                  ) : (
-                    'Load More Bookings'
-                  )}
+                  {loading ? 'Loading...' : 'Load More Bookings'}
                 </button>
               </div>
             )}
-
-            {/* Results Summary */}
-            <div className="mt-4 text-center text-sm text-gray-500">
-              Showing {bookings.length} bookings in {viewMode} view
-              {hasMore && ' (more available)'}
-            </div>
           </>
         )}
       </div>
 
-      {/* Modals */}
-      {showAddForm && (
+      {/* Add/Edit Form Modal */}
+      {(showAddForm || editingBooking) && (
         <BookingForm
+          booking={editingBooking || undefined}
           onSuccess={handleFormSuccess}
-          onCancel={() => setShowAddForm(false)}
+          onCancel={() => {
+            setShowAddForm(false);
+            setEditingBooking(null);
+          }}
         />
       )}
 
-      {editingBooking && (
-        <BookingForm
-          booking={editingBooking}
-          onSuccess={handleFormSuccess}
-          onCancel={() => setEditingBooking(null)}
-        />
-      )}
-
+      {/* Bulk Upload Modal */}
       {showBulkUpload && (
         <BookingBulkUploadModal
           onSuccess={handleBulkUploadSuccess}
@@ -369,10 +415,17 @@ export default function BookingsPage() {
         />
       )}
 
-      <NextDayOperationsModal
-        isOpen={showNextDayOperations}
-        onClose={() => setShowNextDayOperations(false)}
-      />
+      {/* Deposit Returned Modal */}
+      {showDepositModal && depositBooking && (
+        <DepositReturnedModal
+          booking={depositBooking}
+          onSuccess={handleDepositModalSuccess}
+          onClose={() => {
+            setShowDepositModal(false);
+            setDepositBooking(null);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ interface BookingTableProps {
   bookings: Booking[];
   onEdit: (booking: Booking) => void;
   onDelete: (id: string) => void;
+  onDepositReturned: (booking: Booking) => void; // Added this prop
   onSort: (field: keyof Booking) => void;
   sortField: keyof Booking;
   sortDirection: 'asc' | 'desc';
@@ -20,6 +21,7 @@ export default function BookingTable({
   bookings,
   onEdit,
   onDelete,
+  onDepositReturned, // Added this prop
   onSort,
   sortField,
   sortDirection,
@@ -229,15 +231,20 @@ export default function BookingTable({
         );
       case 'returnedDate':
         return (
-          <div className="space-y-1">
-            {booking.deposit && booking.deposit > 0 && (
-              <div className="text-sm text-orange-600 font-medium">
-                {formatCurrency(booking.deposit)}
+          <div className="text-center">
+            {booking.returnedDate ? (
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-green-800">✅ Returned</div>
+                <div className="text-xs text-green-600">
+                  {formatReturnedDate(booking.returnedDate)}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="text-xs font-medium text-orange-800">⏳ Pending</div>
+                <div className="text-xs text-orange-600">Not returned</div>
               </div>
             )}
-            <div className="text-sm text-gray-600">
-              {formatReturnedDate(booking.returnedDate)}
-            </div>
           </div>
         );
       case 'comments':
@@ -248,16 +255,26 @@ export default function BookingTable({
         );
       case 'actions':
         return (
-          <div className="flex space-x-2">
+          <div className="flex flex-col space-y-1">
             <button
               onClick={() => onEdit(booking)}
-              className="text-indigo-600 hover:text-indigo-900 text-sm font-medium transition-colors duration-200"
+              className="text-indigo-600 hover:text-indigo-900 text-xs font-medium transition-colors duration-200 text-left"
             >
               Edit
             </button>
             <button
+              onClick={() => onDepositReturned(booking)}
+              className={`text-xs font-medium transition-colors duration-200 text-left ${
+                booking.returnedDate 
+                  ? 'text-green-600 hover:text-green-800' 
+                  : 'text-orange-600 hover:text-orange-800'
+              }`}
+            >
+              {booking.returnedDate ? 'Update Return' : 'Deposit Returned'}
+            </button>
+            <button
               onClick={() => booking.id && onDelete(booking.id)}
-              className="text-red-600 hover:text-red-900 text-sm font-medium transition-colors duration-200"
+              className="text-red-600 hover:text-red-900 text-xs font-medium transition-colors duration-200 text-left"
             >
               Delete
             </button>
