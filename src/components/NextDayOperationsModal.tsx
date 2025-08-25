@@ -12,22 +12,173 @@ interface NextDayOperationsModalProps {
   onClose: () => void;
 }
 
+interface OperationChecklist {
+  documents: boolean;
+  hireCharges: boolean;
+  deposit: boolean;
+}
+
+// Utility functions for better organization
+const formatTime = (time: string): string => {
+  if (!time) return '-';
+  return time;
+};
+
+// Sub-components for better separation of concerns
+interface TableHeaderProps {
+  columns: string[];
+}
+
+const TableHeader = ({ columns }: TableHeaderProps) => (
+  <thead>
+    <tr className="bg-gray-50 border-b border-gray-200">
+      {columns.map((column) => (
+        <th
+          key={column}
+          className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+        >
+          {column}
+        </th>
+      ))}
+    </tr>
+  </thead>
+);
+
+interface CheckoutRowProps {
+  checkout: CheckoutBooking;
+  index: number;
+  date: string;
+  checklist: OperationChecklist;
+  onChecklistUpdate: (field: keyof OperationChecklist, value: boolean) => void;
+}
+
+const CheckoutRow = ({ checkout, index, date, checklist, onChecklistUpdate }: CheckoutRowProps) => (
+  <tr className={`hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
+    <td className="px-3 py-2 text-xs font-medium text-gray-900">{checkout.coastrReference}</td>
+    <td className="px-3 py-2 text-xs text-gray-900 max-w-32 truncate" title={checkout.customerName}>
+      {checkout.customerName}
+    </td>
+    <td className="px-3 py-2 text-xs text-gray-900">{checkout.phoneNumber || '-'}</td>
+    <td className="px-3 py-2 text-xs font-medium text-gray-900">{checkout.registration}</td>
+    <td className="px-3 py-2 text-xs text-gray-900 max-w-40 truncate" title={checkout.makeModel}>
+      {checkout.makeModel || `${checkout.make || ''} ${checkout.model || ''}`.trim() || '-'}
+    </td>
+    <td className="px-3 py-2 text-xs text-gray-900">{date}</td>
+    <td className="px-3 py-2 text-xs font-medium text-gray-900">{formatTime(checkout.pickUpTime)}</td>
+    <td className="px-3 py-2 text-xs text-gray-900 max-w-32 truncate" title={checkout.pickUpLocation}>
+      {checkout.pickUpLocation || '-'}
+    </td>
+    <td className="px-3 py-2 text-center">
+      <input
+        type="checkbox"
+        checked={checklist.documents}
+        onChange={(e) => onChecklistUpdate('documents', e.target.checked)}
+        className="h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+      />
+    </td>
+    <td className="px-3 py-2 text-center">
+      <input
+        type="checkbox"
+        checked={checklist.hireCharges}
+        onChange={(e) => onChecklistUpdate('hireCharges', e.target.checked)}
+        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+      />
+    </td>
+    <td className="px-3 py-2 text-center">
+      <input
+        type="checkbox"
+        checked={checklist.deposit}
+        onChange={(e) => onChecklistUpdate('deposit', e.target.checked)}
+        className="h-4 w-4 text-orange-600 focus:ring-orange-500 border-gray-300 rounded"
+      />
+    </td>
+  </tr>
+);
+
+interface CheckinRowProps {
+  checkin: CheckinBooking;
+  index: number;
+  date: string;
+}
+
+const CheckinRow = ({ checkin, index, date }: CheckinRowProps) => (
+  <tr className={`hover:bg-gray-50 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
+    <td className="px-3 py-2 text-xs font-medium text-gray-900">{checkin.coastrReference}</td>
+    <td className="px-3 py-2 text-xs text-gray-900 max-w-32 truncate" title={checkin.customerName}>
+      {checkin.customerName}
+    </td>
+    <td className="px-3 py-2 text-xs text-gray-900">{checkin.phoneNumber || '-'}</td>
+    <td className="px-3 py-2 text-xs font-medium text-gray-900">{checkin.registration}</td>
+    <td className="px-3 py-2 text-xs text-gray-900 max-w-40 truncate" title={checkin.makeModel}>
+      {checkin.makeModel || `${checkin.make || ''} ${checkin.model || ''}`.trim() || '-'}
+    </td>
+    <td className="px-3 py-2 text-xs text-gray-900">{date}</td>
+    <td className="px-3 py-2 text-xs font-medium text-gray-900">{formatTime(checkin.dropOffTime)}</td>
+    <td className="px-3 py-2 text-xs text-gray-900 max-w-32 truncate" title={checkin.dropOffLocation}>
+      {checkin.dropOffLocation || '-'}
+    </td>
+  </tr>
+);
+
+interface EmptyStateProps {
+  icon: string;
+  message: string;
+}
+
+const EmptyState = ({ icon, message }: EmptyStateProps) => (
+  <div className="text-center py-8 text-gray-500">
+    <div className="text-4xl mb-2">{icon}</div>
+    <p>{message}</p>
+  </div>
+);
+
+interface LoadingStateProps {}
+
+const LoadingState = ({}: LoadingStateProps) => (
+  <div className="flex flex-col items-center justify-center py-12">
+    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+    <p className="text-gray-600">Loading operations...</p>
+  </div>
+);
+
+// Constants for better maintainability
+const CHECKOUT_COLUMNS = [
+  'Coastr', 'Name', 'Phone', 'REG', 'Vehicle', 'Date', 'Time', 'Location', 
+  'Documents', 'Hire Charges', 'Deposit'
+];
+
+const CHECKIN_COLUMNS = [
+  'Coastr', 'Name', 'Phone', 'REG', 'Vehicle', 'Date', 'Time', 'Location'
+];
+
 export default function NextDayOperationsModal({ isOpen, onClose }: NextDayOperationsModalProps) {
   const [operations, setOperations] = useState<NextDayOperations | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'checkouts' | 'checkins'>('checkouts');
+  const [checklists, setChecklists] = useState<Record<string, OperationChecklist>>({});
 
-  useEffect(() => {
-    if (isOpen) {
-      loadNextDayOperations();
-    }
-  }, [isOpen]);
+  // Business logic functions
+  const initializeChecklists = (checkouts: CheckoutBooking[]): Record<string, OperationChecklist> => {
+    const initialChecklists: Record<string, OperationChecklist> = {};
+    checkouts.forEach(operation => {
+      initialChecklists[operation.id] = {
+        documents: false,
+        hireCharges: false,
+        deposit: false
+      };
+    });
+    return initialChecklists;
+  };
 
-  const loadNextDayOperations = async () => {
+  const loadNextDayOperations = async (): Promise<void> => {
     try {
       setLoading(true);
       const data = await NextDayOperationsService.getNextDayOperations();
       setOperations(data);
+      
+      // Initialize checklists only for checkouts
+      const initialChecklists = initializeChecklists(data.checkouts);
+      setChecklists(initialChecklists);
     } catch (error) {
       toast.error('Failed to load next day operations');
       console.error('Error loading operations:', error);
@@ -36,22 +187,34 @@ export default function NextDayOperationsModal({ isOpen, onClose }: NextDayOpera
     }
   };
 
-  const formatCurrency = (amount: number | undefined) => {
-    if (!amount) return '-';
-    return `£${amount.toFixed(2)}`;
+  const updateChecklist = (operationId: string, field: keyof OperationChecklist, value: boolean): void => {
+    setChecklists(prev => ({
+      ...prev,
+      [operationId]: {
+        ...prev[operationId],
+        [field]: value
+      }
+    }));
   };
 
-  const formatTime = (time: string) => {
-    if (!time) return '-';
-    return time;
+  const handleTabChange = (tab: 'checkouts' | 'checkins'): void => {
+    setActiveTab(tab);
   };
+
+  // Effects
+  useEffect(() => {
+    if (isOpen) {
+      loadNextDayOperations();
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-white p-6 border-b border-gray-200 rounded-t-xl">
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-2xl max-w-[95vw] w-full max-h-[90vh] overflow-hidden border-2 border-gray-300">
+        {/* Header Section */}
+        <div className="bg-white p-6 border-b border-gray-200">
           <div className="flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-bold text-gray-900 flex items-center space-x-2">
@@ -79,7 +242,7 @@ export default function NextDayOperationsModal({ isOpen, onClose }: NextDayOpera
           <div className="mt-6">
             <div className="flex bg-gray-100 rounded-lg p-1">
               <button
-                onClick={() => setActiveTab('checkouts')}
+                onClick={() => handleTabChange('checkouts')}
                 className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 flex items-center justify-center space-x-2 ${
                   activeTab === 'checkouts'
                     ? 'bg-white text-blue-600 shadow-sm'
@@ -90,7 +253,7 @@ export default function NextDayOperationsModal({ isOpen, onClose }: NextDayOpera
                 <span>Pick-ups ({operations?.checkouts.length || 0})</span>
               </button>
               <button
-                onClick={() => setActiveTab('checkins')}
+                onClick={() => handleTabChange('checkins')}
                 className={`flex-1 px-4 py-2 text-sm font-medium rounded-md transition-all duration-200 flex items-center justify-center space-x-2 ${
                   activeTab === 'checkins'
                     ? 'bg-white text-blue-600 shadow-sm'
@@ -104,92 +267,46 @@ export default function NextDayOperationsModal({ isOpen, onClose }: NextDayOpera
           </div>
         </div>
 
-        <div className="p-6">
+        {/* Content Section */}
+        <div className="overflow-auto max-h-[60vh]">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-              <p className="text-gray-600">Loading operations...</p>
-            </div>
+            <LoadingState />
           ) : operations ? (
             <>
               {/* Checkouts Tab */}
               {activeTab === 'checkouts' && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                    <span>🚗</span>
-                    <span>Vehicle Pick-ups - {operations.date}</span>
-                  </h3>
-                  
+                <div className="p-4">
                   {operations.checkouts.length === 0 ? (
-                    <div className="text-center py-8">
-                      <div className="text-gray-400 text-6xl mb-4">🚗</div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Pick-ups Scheduled</h3>
-                      <p className="text-gray-500">No vehicle pick-ups are scheduled for tomorrow.</p>
-                    </div>
+                    <EmptyState 
+                      icon="🚗" 
+                      message="No vehicle pick-ups scheduled for tomorrow" 
+                    />
                   ) : (
-                    <div className="grid gap-4">
-                      {operations.checkouts.map((checkout) => (
-                        <div
-                          key={checkout.id}
-                          className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                        >
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {/* Left Column */}
-                            <div className="space-y-2">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-sm font-bold text-indigo-600 bg-indigo-100 px-2 py-1 rounded">
-                                  {checkout.coastrReference}
-                                </span>
-                                <span className="text-sm font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded">
-                                  {checkout.registration}
-                                </span>
-                              </div>
-                              <div className="text-sm font-semibold text-gray-900">
-                                {checkout.customerName}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                📞 {checkout.phoneNumber}
-                              </div>
-                            </div>
-
-                            {/* Middle Column */}
-                            <div className="space-y-2">
-                              <div className="text-sm text-gray-700">
-                                <span className="font-medium">Vehicle:</span>{' '}
-                                {checkout.makeModel || `${checkout.make || ''} ${checkout.model || ''}`.trim() || '-'}
-                              </div>
-                              <div className="text-sm text-gray-700">
-                                <span className="font-medium">Time:</span>{' '}
-                                <span className="font-bold text-blue-600">{formatTime(checkout.pickUpTime)}</span>
-                              </div>
-                              <div className="text-sm text-gray-700">
-                                <span className="font-medium">Location:</span>{' '}
-                                {checkout.pickUpLocation}
-                              </div>
-                            </div>
-
-                            {/* Right Column */}
-                            <div className="space-y-2">
-                              {checkout.depositToBeCollectedAtBranch && checkout.depositToBeCollectedAtBranch > 0 && (
-                                <div className="text-sm">
-                                  <span className="font-medium text-orange-700">Deposit to Collect:</span>{' '}
-                                  <span className="font-bold text-orange-600 bg-orange-100 px-2 py-1 rounded">
-                                    {formatCurrency(checkout.depositToBeCollectedAtBranch)}
-                                  </span>
-                                </div>
-                              )}
-                              {checkout.comments && (
-                                <div className="text-sm">
-                                  <span className="font-medium text-gray-700">Comments:</span>
-                                  <div className="text-gray-600 bg-gray-100 p-2 rounded mt-1 text-xs">
-                                    {checkout.comments}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full bg-white">
+                        <TableHeader columns={CHECKOUT_COLUMNS} />
+                        <tbody className="divide-y divide-gray-200">
+                          {operations.checkouts.map((checkout, index) => {
+                            const checklist = checklists[checkout.id] || { 
+                              documents: false, 
+                              hireCharges: false, 
+                              deposit: false 
+                            };
+                            return (
+                              <CheckoutRow
+                                key={checkout.id}
+                                checkout={checkout}
+                                index={index}
+                                date={operations.date}
+                                checklist={checklist}
+                                onChecklistUpdate={(field, value) => 
+                                  updateChecklist(checkout.id, field, value)
+                                }
+                              />
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
@@ -197,74 +314,27 @@ export default function NextDayOperationsModal({ isOpen, onClose }: NextDayOpera
 
               {/* Checkins Tab */}
               {activeTab === 'checkins' && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-                    <span>🏁</span>
-                    <span>Vehicle Drop-offs - {operations.date}</span>
-                  </h3>
-                  
+                <div className="p-4">
                   {operations.checkins.length === 0 ? (
-                    <div className="text-center py-8">
-                      <div className="text-gray-400 text-6xl mb-4">🏁</div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">No Drop-offs Scheduled</h3>
-                      <p className="text-gray-500">No vehicle drop-offs are scheduled for tomorrow.</p>
-                    </div>
+                    <EmptyState 
+                      icon="🏁" 
+                      message="No vehicle drop-offs scheduled for tomorrow" 
+                    />
                   ) : (
-                    <div className="grid gap-4">
-                      {operations.checkins.map((checkin) => (
-                        <div
-                          key={checkin.id}
-                          className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 hover:shadow-md transition-shadow"
-                        >
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {/* Left Column */}
-                            <div className="space-y-2">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-sm font-bold text-indigo-600 bg-indigo-100 px-2 py-1 rounded">
-                                  {checkin.coastrReference}
-                                </span>
-                                <span className="text-sm font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded">
-                                  {checkin.registration}
-                                </span>
-                              </div>
-                              <div className="text-sm font-semibold text-gray-900">
-                                {checkin.customerName}
-                              </div>
-                              <div className="text-sm text-gray-600">
-                                📞 {checkin.phoneNumber}
-                              </div>
-                            </div>
-
-                            {/* Middle Column */}
-                            <div className="space-y-2">
-                              <div className="text-sm text-gray-700">
-                                <span className="font-medium">Vehicle:</span>{' '}
-                                {checkin.makeModel || `${checkin.make || ''} ${checkin.model || ''}`.trim() || '-'}
-                              </div>
-                              <div className="text-sm text-gray-700">
-                                <span className="font-medium">Time:</span>{' '}
-                                <span className="font-bold text-blue-600">{formatTime(checkin.dropOffTime)}</span>
-                              </div>
-                              <div className="text-sm text-gray-700">
-                                <span className="font-medium">Location:</span>{' '}
-                                {checkin.dropOffLocation}
-                              </div>
-                            </div>
-
-                            {/* Right Column */}
-                            <div className="space-y-2">
-                              {checkin.comments && (
-                                <div className="text-sm">
-                                  <span className="font-medium text-gray-700">Comments:</span>
-                                  <div className="text-gray-600 bg-gray-100 p-2 rounded mt-1 text-xs">
-                                    {checkin.comments}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full bg-white">
+                        <TableHeader columns={CHECKIN_COLUMNS} />
+                        <tbody className="divide-y divide-gray-200">
+                          {operations.checkins.map((checkin, index) => (
+                            <CheckinRow
+                              key={checkin.id}
+                              checkin={checkin}
+                              index={index}
+                              date={operations.date}
+                            />
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>
@@ -283,14 +353,32 @@ export default function NextDayOperationsModal({ isOpen, onClose }: NextDayOpera
           )}
         </div>
 
-        {/* Footer */}
-        <div className="sticky bottom-0 bg-gray-50 px-6 py-4 rounded-b-xl border-t border-gray-200">
+        {/* Footer Section */}
+        <div className="bg-gray-50 px-6 py-4 border-t border-gray-200">
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600">
               {operations && (
-                <>
-                  📊 {operations.checkouts.length} pick-ups, {operations.checkins.length} drop-offs scheduled
-                </>
+                <div className="flex items-center space-x-6">
+                  <span>
+                    📊 {operations.checkouts.length} pick-ups, {operations.checkins.length} drop-offs scheduled
+                  </span>
+                  {activeTab === 'checkouts' && (
+                    <div className="flex items-center space-x-4 text-xs">
+                      <span className="flex items-center space-x-1">
+                        <input type="checkbox" className="h-3 w-3 text-green-600 rounded" disabled />
+                        <span>Documents</span>
+                      </span>
+                      <span className="flex items-center space-x-1">
+                        <input type="checkbox" className="h-3 w-3 text-blue-600 rounded" disabled />
+                        <span>Hire Charges</span>
+                      </span>
+                      <span className="flex items-center space-x-1">
+                        <input type="checkbox" className="h-3 w-3 text-orange-600 rounded" disabled />
+                        <span>Deposit</span>
+                      </span>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             <button

@@ -10,6 +10,7 @@ import BookingForm from '@/components/BookingForm';
 import BookingTable from '@/components/BookingTable';
 import BookingBulkUploadModal from '@/components/BookingBulkUploadModal';
 import DepositReturnedModal from '@/components/DepositReturnedModal';
+import NextDayOperationsModal from '@/components/NextDayOperationsModal';
 import toast, { Toaster } from 'react-hot-toast';
 import { DocumentSnapshot } from 'firebase/firestore';
 
@@ -22,6 +23,7 @@ export default function BookingsPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
+  const [showNextDayOps, setShowNextDayOps] = useState(false);
   const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [depositBooking, setDepositBooking] = useState<Booking | null>(null);
   const [sortField, setSortField] = useState<keyof Booking>('bookingConfirmationDate');
@@ -223,6 +225,13 @@ export default function BookingsPage() {
                 <span>Export</span>
               </button>
               <button
+                onClick={() => setShowNextDayOps(true)}
+                className="px-4 py-2 text-white bg-gradient-to-r from-purple-500 to-purple-600 rounded-lg hover:from-purple-600 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 shadow-sm transition-all duration-200 flex items-center space-x-2"
+              >
+                <span>📅</span>
+                <span>Next Day Ops</span>
+              </button>
+              <button
                 onClick={() => setShowAddForm(true)}
                 className="px-6 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md transition-all duration-200 font-medium flex items-center space-x-2"
               >
@@ -243,11 +252,11 @@ export default function BookingsPage() {
               <div className="flex-1 relative max-w-md">
                 <input
                   type="text"
+                  placeholder="Search by coastr reference, customer name, or registration..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
-                  placeholder="Search bookings..."
-                  className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 placeholder-gray-500"
+                  className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <span className="text-gray-400">🔍</span>
@@ -255,7 +264,7 @@ export default function BookingsPage() {
               </div>
               <button
                 onClick={handleSearch}
-                className="px-6 py-3 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md transition-all duration-200 font-medium"
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
               >
                 Search
               </button>
@@ -266,14 +275,14 @@ export default function BookingsPage() {
                     setLastDoc(null);
                     loadBookings(true);
                   }}
-                  className="px-4 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-all duration-200 font-medium"
+                  className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
                 >
                   Clear
                 </button>
               )}
             </div>
 
-            {/* View Mode Toggle */}
+            {/* View Toggle */}
             <div className="flex bg-gray-100 rounded-lg p-1">
               <button
                 onClick={() => setViewMode('summary')}
@@ -426,6 +435,12 @@ export default function BookingsPage() {
           }}
         />
       )}
+
+      {/* Next Day Operations Modal */}
+      <NextDayOperationsModal
+        isOpen={showNextDayOps}
+        onClose={() => setShowNextDayOps(false)}
+      />
     </div>
   );
 }

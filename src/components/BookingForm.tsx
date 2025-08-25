@@ -7,6 +7,8 @@ import { useForm } from 'react-hook-form';
 import { Booking, BookingFormData } from '@/types/bookings';
 import { BookingService } from '@/services/bookingService';
 import { VehicleService } from '@/services/vehicleService';
+import { GroupAssignmentService } from '@/services/groupAssignmentService';
+import { GroupService } from '@/services/groupService';
 import { useBookingAutoCalculation } from '@/hooks/useBookingAutoCalculation';
 import toast from 'react-hot-toast';
 
@@ -114,10 +116,77 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
     setValue('paidToUs', total > 0 ? total.toFixed(2) : '');
   }, [hireChargeInclVat, insurance, additionalIncome, extras, chargesIncome, setValue]);
 
+  // Enhanced vehicle search - filter out vehicles from INACTIVE groups
+  const searchVehicles = async (query: string) => {
+    if (query.length < 2) {
+      setVehicleSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+
+    try {
+      // Get vehicles that match the search
+      const vehicles = await VehicleService.searchVehicles(query);
+      
+      // Filter vehicles to only include those from ACTIVE groups or unassigned vehicles
+      const vehiclesWithActiveGroups = [];
+      
+      for (const vehicle of vehicles) {
+        // Get the group assignment for this vehicle
+        const assignment = await GroupAssignmentService.getVehicleAssignment(vehicle.id!);
+        
+        if (assignment) {
+          // Check if the group is active
+          const group = await GroupService.getGroupById(assignment.groupId);
+          if (group && group.status === 'active') {
+            vehiclesWithActiveGroups.push({
+              ...vehicle,
+              groupName: assignment.groupName,
+              groupStatus: 'active'
+            });
+          }
+          // Skip vehicles from inactive groups - they won't appear in suggestions
+        } else {
+          // Vehicle not assigned to any group, include it
+          vehiclesWithActiveGroups.push({
+            ...vehicle,
+            groupName: 'Unassigned',
+            groupStatus: 'unassigned'
+          });
+        }
+      }
+      
+      setVehicleSuggestions(vehiclesWithActiveGroups.slice(0, 5)); // Limit to 5 suggestions
+      setShowSuggestions(vehiclesWithActiveGroups.length > 0);
+    } catch (error) {
+      console.error('Failed to search vehicles:', error);
+      setVehicleSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
   // Handle vehicle selection from dropdown
   const selectVehicle = (vehicle: any) => {
     setValue('registration', vehicle.registration);
+    setValue('make', vehicle.make);
+    setValue('model', vehicle.model);
+    
+    // Only set group if it's from an active group
+    if (vehicle.groupStatus === 'active') {
+      setValue('group', vehicle.groupName);
+    } else {
+      setValue('group', ''); // Clear group if unassigned
+    }
+    
     setShowSuggestions(false);
+    setVehicleSuggestions([]);
+  };
+
+  // Handle registration input change
+  const handleRegistrationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.toUpperCase();
+    setValue('registration', value);
+    searchVehicles(value);
   };
 
   // Calculate number of days between dates (allow same-day rentals)
@@ -195,8 +264,8 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
   const calculationSummary = getCalculationSummary();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[95vh] overflow-y-auto">
+    <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[95vh] overflow-y-auto border-2 border-gray-300">
         {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
           <div className="flex justify-between items-center">
@@ -393,6 +462,7 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                 <input
                   type="text"
                   {...register('registration', { required: 'Registration is required' })}
+                  onChange={handleRegistrationChange}
                   placeholder="e.g., AB12 CDE"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
                   style={{ textTransform: 'uppercase' }}
@@ -401,7 +471,7 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                   <p className="text-red-500 text-xs mt-1">{errors.registration.message}</p>
                 )}
                 
-                {/* Vehicle Suggestions */}
+                {/* Enhanced Vehicle Suggestions - Only Active Groups */}
                 {showSuggestions && vehicleSuggestions.length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
                     {vehicleSuggestions.map((vehicle, index) => (
@@ -410,9 +480,22 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                         onClick={() => selectVehicle(vehicle)}
                         className="px-3 py-2 cursor-pointer hover:bg-purple-50 border-b border-gray-100 last:border-b-0"
                       >
-                        <div className="font-medium">{vehicle.registration}</div>
-                        <div className="text-sm text-gray-600">
-                          {vehicle.make} {vehicle.model}
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium">{vehicle.registration}</div>
+                            <div className="text-sm text-gray-600">
+                              {vehicle.make} {vehicle.model}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`text-xs px-2 py-0.5 rounded-full ${
+                              vehicle.groupStatus === 'active' 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {vehicle.groupName}
+                            </div>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -420,7 +503,7 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                 )}
               </div>
 
-              {/* Group (Auto-populated) */}
+              {/* Group (Auto-populated from ACTIVE groups only) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Vehicle Group
@@ -431,12 +514,12 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                 <input
                   type="text"
                   {...register('group')}
-                  placeholder="Auto-populated from settings"
+                  placeholder="Auto-populated from active vehicle groups"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50"
                   readOnly
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Automatically filled based on vehicle assignment in settings
+                  Only vehicles from active groups are shown
                 </p>
               </div>
 
@@ -731,6 +814,18 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                 <p className="text-xs text-gray-500 mt-1">
                   Sum of all income fields (excluding deposits)
                 </p>
+              </div>
+
+              {/* Returned Date */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Returned Date
+                </label>
+                <input
+                  type="date"
+                  {...register('returnedDate')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                />
               </div>
             </div>
           </div>

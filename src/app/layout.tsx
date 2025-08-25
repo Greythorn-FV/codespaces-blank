@@ -5,7 +5,7 @@ import Navigation from '@/components/Navigation';
 import ErrorBoundary from '@/components/ErrorBoundary';
 
 export const metadata = {
-  title: 'CoastR Manager',
+  title: 'Fairview Booking Manager',
   description: 'Fleet and booking management system',
 };
 
