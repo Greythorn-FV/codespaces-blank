@@ -8,27 +8,25 @@ import { GroupService } from '@/services/groupService';
 import GroupPricingCard from '@/components/GroupPricingCard';
 import PricingModal from '@/components/PricingModal';
 import GroupFormModal from '@/components/GroupFormModal';
+import ExtrasTypesSection from '@/components/ExtrasTypesSection';
 import toast, { Toaster } from 'react-hot-toast';
-import { useRouter } from 'next/navigation';
 
 export default function SettingsPage() {
   const [groups, setGroups] = useState<VehicleGroup[]>([]);
+  const [filteredGroups, setFilteredGroups] = useState<VehicleGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filteredGroups, setFilteredGroups] = useState<VehicleGroup[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<VehicleGroup | null>(null);
+  const [editingGroup, setEditingGroup] = useState<VehicleGroup | null>(null);
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [showGroupFormModal, setShowGroupFormModal] = useState(false);
-  const [editingGroup, setEditingGroup] = useState<VehicleGroup | null>(null);
   const [initializing, setInitializing] = useState(false);
-  
-  const router = useRouter();
 
   // Load groups
   const loadGroups = async () => {
     try {
       setLoading(true);
-      const result = await GroupService.getGroups(100); // Get all groups
+      const result = await GroupService.getGroups(1000);
       setGroups(result.groups);
       setFilteredGroups(result.groups);
     } catch (error) {
@@ -39,8 +37,25 @@ export default function SettingsPage() {
     }
   };
 
-  // Initialize default groups
-  const initializeDefaultGroups = async () => {
+  // Filter groups based on search
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredGroups(groups);
+    } else {
+      const filtered = groups.filter(group =>
+        group.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredGroups(filtered);
+    }
+  }, [searchTerm, groups]);
+
+  // Load data on component mount
+  useEffect(() => {
+    loadGroups();
+  }, []);
+
+  // Handle initialize default groups
+  const handleInitializeDefaults = async () => {
     try {
       setInitializing(true);
       await GroupService.initializeDefaultGroups();
@@ -54,26 +69,9 @@ export default function SettingsPage() {
     }
   };
 
-  // Filter groups based on search
-  useEffect(() => {
-    if (!searchTerm.trim()) {
-      setFilteredGroups(groups);
-    } else {
-      const filtered = groups.filter(group =>
-        group.name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredGroups(filtered);
-    }
-  }, [searchTerm, groups]);
-
-  // Load groups on component mount
-  useEffect(() => {
-    loadGroups();
-  }, []);
-
-  // Handle vehicle count click - navigate to assignment page
+  // Handle vehicle count click
   const handleVehicleCountClick = (group: VehicleGroup) => {
-    router.push(`/settings/groups/${group.id}/vehicles`);
+    window.location.href = `/settings/groups/${group.id}/vehicles`;
   };
 
   // Handle pricing click
@@ -170,26 +168,19 @@ export default function SettingsPage() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                Settings
+                System Settings
               </h1>
-              <p className="text-gray-600 mt-2">Configure your system settings</p>
+              <p className="text-gray-600 mt-2">Configure vehicle groups, pricing, and system preferences</p>
             </div>
-            <div className="flex space-x-3">
-              <button
-                onClick={() => router.push('/fleet')}
-                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition-all duration-200 flex items-center space-x-2"
-              >
-                <span>🚗</span>
-                <span>Fleet</span>
-              </button>
+            <div className="flex items-center space-x-4">
               {groups.length === 0 && !loading && (
                 <button
-                  onClick={initializeDefaultGroups}
+                  onClick={handleInitializeDefaults}
                   disabled={initializing}
-                  className="px-4 py-2 text-white bg-green-600 border border-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 shadow-sm transition-all duration-200 flex items-center space-x-2 disabled:opacity-50"
+                  className="px-6 py-3 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm transition-all duration-200 flex items-center space-x-2 font-medium"
                 >
                   <span>⚡</span>
-                  <span>{initializing ? 'Initializing...' : 'Initialize Groups'}</span>
+                  <span>{initializing ? 'Initializing...' : 'Initialize Default Groups'}</span>
                 </button>
               )}
             </div>
@@ -250,28 +241,28 @@ export default function SettingsPage() {
             </div>
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-lg font-bold text-gray-900">{groups.length}</div>
-                <div className="text-xs text-gray-600">Total Groups</div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-sm font-medium text-gray-600">Total Groups</div>
+                <div className="text-2xl font-bold text-gray-900">{groups.length}</div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-lg font-bold text-green-600">
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-sm font-medium text-gray-600">Active Groups</div>
+                <div className="text-2xl font-bold text-green-600">
                   {groups.filter(g => g.status === 'active').length}
                 </div>
-                <div className="text-xs text-gray-600">Active Groups</div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-lg font-bold text-orange-600">
-                  {groups.filter(g => g.status === 'inactive').length}
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-sm font-medium text-gray-600">Total Vehicles</div>
+                <div className="text-2xl font-bold text-blue-600">
+                  {groups.reduce((total, group) => total + group.vehicleCount, 0)}
                 </div>
-                <div className="text-xs text-gray-600">Inactive Groups</div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-gray-200">
-                <div className="text-lg font-bold text-purple-600">
-                  {groups.reduce((sum, g) => sum + g.vehicleCount, 0)}
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-sm font-medium text-gray-600">Avg. Daily Rate</div>
+                <div className="text-2xl font-bold text-indigo-600">
+                  £{Math.round(groups.reduce((sum, g) => sum + g.dailyRate, 0) / groups.length || 0)}
                 </div>
-                <div className="text-xs text-gray-600">Assigned Vehicles</div>
               </div>
             </div>
           </div>
@@ -279,20 +270,20 @@ export default function SettingsPage() {
           {/* Groups Grid */}
           <div className="p-6">
             {loading ? (
-              <div className="text-center py-12">
-                <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                <p className="mt-2 text-gray-600 text-sm">Loading groups...</p>
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="ml-3 text-gray-600">Loading groups...</span>
               </div>
             ) : groups.length === 0 ? (
               <div className="text-center py-12">
-                <div className="text-4xl mb-4">🚗</div>
+                <div className="text-4xl mb-4">🏷️</div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">No Vehicle Groups Found</h3>
-                <p className="text-gray-600 mb-6 text-sm">Get started by initializing your default vehicle groups or create a custom group</p>
-                <div className="flex justify-center space-x-3">
+                <p className="text-gray-600 text-sm mb-6">Create your first vehicle group to get started</p>
+                <div className="flex justify-center space-x-4">
                   <button
-                    onClick={initializeDefaultGroups}
+                    onClick={handleInitializeDefaults}
                     disabled={initializing}
-                    className="px-6 py-3 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-md transition-all duration-200 font-medium disabled:opacity-50"
+                    className="px-6 py-3 text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200 font-medium"
                   >
                     {initializing ? 'Initializing...' : 'Initialize Default Groups'}
                   </button>
@@ -330,7 +321,10 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Future Settings Sections - Placeholder for additional settings */}
+        {/* Extras Types Section */}
+        <ExtrasTypesSection />
+
+        {/* Future Settings Sections - System Configuration */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 px-6 py-4 border-b border-gray-100">
             <div className="flex items-center space-x-3">
@@ -351,7 +345,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Another Future Section Example */}
+        {/* User Management Section */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="bg-gradient-to-r from-purple-50 to-violet-50 px-6 py-4 border-b border-gray-100">
             <div className="flex items-center space-x-3">

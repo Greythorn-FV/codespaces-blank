@@ -10,7 +10,7 @@ interface BookingTableProps {
   bookings: Booking[];
   onEdit: (booking: Booking) => void;
   onDelete: (id: string) => void;
-  onDepositReturned: (booking: Booking) => void; // Added this prop
+  onDepositReturned: (booking: Booking) => void;
   onSort: (field: keyof Booking) => void;
   sortField: keyof Booking;
   sortDirection: 'asc' | 'desc';
@@ -21,7 +21,7 @@ export default function BookingTable({
   bookings,
   onEdit,
   onDelete,
-  onDepositReturned, // Added this prop
+  onDepositReturned,
   onSort,
   sortField,
   sortDirection,
@@ -45,203 +45,213 @@ export default function BookingTable({
     return format(new Date(returnedDate), 'dd/MM/yyyy');
   };
 
+  const handleRowClick = (booking: Booking, columnKey: ColumnKey, event: React.MouseEvent) => {
+    // Don't trigger row click if clicking on action buttons
+    if (columnKey === 'actions') return;
+    
+    // Don't trigger if clicking on a button or link
+    const target = event.target as HTMLElement;
+    if (target.tagName === 'BUTTON' || target.closest('button')) return;
+    
+    onEdit(booking);
+  };
+
   const SortIcon = ({ field }: { field: keyof Booking }) => {
     if (sortField !== field) {
-      return <span className="text-gray-400 ml-1">⇅</span>;
+      return <span className="text-gray-400 ml-1 text-xs">⇅</span>;
     }
     return sortDirection === 'asc' ? 
-      <span className="text-indigo-600 ml-1">↑</span> : 
-      <span className="text-indigo-600 ml-1">↓</span>;
+      <span className="text-indigo-600 ml-1 text-xs">↑</span> : 
+      <span className="text-indigo-600 ml-1 text-xs">↓</span>;
   };
 
   const getCellContent = (booking: Booking, columnKey: ColumnKey) => {
     switch (columnKey) {
       case 'bookingConfirmationDate':
         return (
-          <div className="text-sm font-medium text-gray-900">
+          <div className="text-xs font-medium text-gray-800 text-center">
             {formatDate(booking.bookingConfirmationDate)}
           </div>
         );
       case 'supplier':
         return (
-          <div className="text-sm text-gray-600">
+          <div className="text-xs text-gray-600 text-center">
             {booking.supplier || '-'}
           </div>
         );
       case 'reference':
         return (
-          <div className="text-sm text-gray-600">
+          <div className="text-xs text-gray-600 text-center">
             {booking.reference || '-'}
           </div>
         );
       case 'coastrReference':
         return (
-          <div className="text-sm font-bold text-indigo-600 bg-indigo-100 px-2 py-1 rounded-md inline-block">
-            {booking.coastrReference}
+          <div className="flex justify-center">
+            <div className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+              {booking.coastrReference}
+            </div>
           </div>
         );
       case 'sageInv':
         return (
-          <div className="text-sm text-gray-600">
+          <div className="text-xs text-gray-600 text-center">
             {booking.sageInv || '-'}
           </div>
         );
       case 'notes':
         return (
-          <div className="text-sm text-gray-600 max-w-32 truncate">
+          <div className="text-xs text-gray-600 max-w-24 truncate text-center mx-auto" title={booking.notes || '-'}>
             {booking.notes || '-'}
           </div>
         );
       case 'customerName':
         return (
-          <div className="text-sm font-semibold text-gray-900">
+          <div className="text-xs font-medium text-gray-800 text-center">
             {booking.customerName}
           </div>
         );
       case 'phoneNumber':
         return (
-          <div className="text-sm text-gray-600">
+          <div className="text-xs text-gray-600 text-center">
             {booking.phoneNumber}
           </div>
         );
       case 'group':
         return (
-          <div className="text-sm text-gray-600">
-            {booking.group || '-'}
+          <div className="flex justify-center">
+            <div className="text-xs text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded">
+              {booking.group || 'Unassigned'}
+            </div>
           </div>
         );
       case 'registration':
         return (
-          <div className="text-sm font-bold text-gray-900 bg-gray-100 px-2 py-1 rounded-md inline-block">
-            {booking.registration}
+          <div className="flex justify-center">
+            <div className="text-xs font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+              {booking.registration}
+            </div>
           </div>
         );
       case 'makeModel':
         return (
-          <div className="text-sm text-gray-600">
-            {booking.makeModel || '-'}
+          <div className="text-xs text-gray-700 text-center">
+            {booking.makeModel || `${booking.make || ''} ${booking.model || ''}`.trim() || '-'}
           </div>
         );
       case 'pickUpDate':
         return (
-          <div className="text-sm text-gray-900">
+          <div className="text-xs text-gray-700 text-center">
             {formatDate(booking.pickUpDate)}
           </div>
         );
       case 'pickUpTime':
         return (
-          <div className="text-sm text-gray-600">
+          <div className="text-xs text-gray-600 text-center">
             {booking.pickUpTime || '-'}
           </div>
         );
       case 'pickUpLocation':
         return (
-          <div className="text-sm text-gray-600 max-w-32 truncate">
+          <div className="text-xs text-gray-600 max-w-24 truncate text-center mx-auto" title={booking.pickUpLocation || '-'}>
             {booking.pickUpLocation || '-'}
           </div>
         );
       case 'dropOffDate':
         return (
-          <div className="text-sm text-gray-900">
+          <div className="text-xs text-gray-700 text-center">
             {formatDate(booking.dropOffDate)}
           </div>
         );
       case 'dropOffTime':
         return (
-          <div className="text-sm text-gray-600">
+          <div className="text-xs text-gray-600 text-center">
             {booking.dropOffTime || '-'}
           </div>
         );
       case 'dropOffLocation':
         return (
-          <div className="text-sm text-gray-600 max-w-32 truncate">
+          <div className="text-xs text-gray-600 max-w-24 truncate text-center mx-auto" title={booking.dropOffLocation || '-'}>
             {booking.dropOffLocation || '-'}
           </div>
         );
       case 'noOfDays':
         return (
-          <div className="text-sm font-medium text-gray-900">
-            {booking.noOfDays || '-'}
+          <div className="flex justify-center">
+            <div className="text-xs font-medium text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded">
+              {booking.noOfDays || '-'}
+            </div>
           </div>
         );
       case 'hireChargeInclVat':
         return (
-          <div className="text-sm font-medium text-green-600">
+          <div className="text-xs font-medium text-green-700 text-center">
             {formatCurrency(booking.hireChargeInclVat)}
           </div>
         );
       case 'insurance':
         return (
-          <div className="text-sm text-gray-900">
+          <div className="text-xs text-gray-700 text-center">
             {formatCurrency(booking.insurance)}
           </div>
         );
       case 'additionalIncome':
         return (
-          <div className="text-sm text-blue-600">
+          <div className="text-xs text-gray-700 text-center">
             {formatCurrency(booking.additionalIncome)}
           </div>
         );
       case 'additionalIncomeReason':
         return (
-          <div className="text-sm text-gray-600 max-w-32 truncate">
+          <div className="text-xs text-gray-600 max-w-24 truncate text-center mx-auto" title={booking.additionalIncomeReason || '-'}>
             {booking.additionalIncomeReason || '-'}
           </div>
         );
       case 'extras':
         return (
-          <div className="text-sm text-purple-600">
+          <div className="text-xs text-gray-700 text-center">
             {formatCurrency(booking.extras)}
           </div>
         );
       case 'extrasType':
         return (
-          <div className="text-sm text-gray-600 max-w-32 truncate">
+          <div className="text-xs text-gray-600 max-w-24 truncate text-center mx-auto" title={booking.extrasType || '-'}>
             {booking.extrasType || '-'}
           </div>
         );
       case 'depositToBeCollectedAtBranch':
         return (
-          <div className="flex items-center space-x-2">
-            <div className="text-sm text-gray-900">
-              {formatCurrency(booking.depositToBeCollectedAtBranch)}
-            </div>
-            {booking.depositToBeCollectedStatus && (
-              <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                booking.depositToBeCollectedStatus === 'Yes' 
-                  ? 'bg-green-100 text-green-800' 
-                  : 'bg-red-100 text-red-800'
-              }`}>
-                {booking.depositToBeCollectedStatus}
-              </span>
-            )}
+          <div className="text-xs text-gray-700 text-center">
+            {formatCurrency(booking.depositToBeCollectedAtBranch)}
           </div>
         );
       case 'chargesIncome':
         return (
-          <div className="text-sm text-gray-900">
+          <div className="text-xs text-gray-700 text-center">
             {formatCurrency(booking.chargesIncome)}
           </div>
         );
       case 'paidToUs':
         return (
-          <div className="text-sm font-bold text-green-700">
-            {formatCurrency(booking.paidToUs)}
+          <div className="flex justify-center">
+            <div className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+              {formatCurrency(booking.paidToUs)}
+            </div>
           </div>
         );
       case 'returnedDate':
         return (
-          <div className="text-center">
+          <div className="text-xs text-center">
             {booking.returnedDate ? (
-              <div className="space-y-1">
-                <div className="text-xs font-medium text-green-800">✅ Returned</div>
+              <div className="space-y-0.5">
+                <div className="text-xs font-medium text-green-700">✅ Returned</div>
                 <div className="text-xs text-green-600">
                   {formatReturnedDate(booking.returnedDate)}
                 </div>
               </div>
             ) : (
-              <div className="space-y-1">
-                <div className="text-xs font-medium text-orange-800">⏳ Pending</div>
+              <div className="space-y-0.5">
+                <div className="text-xs font-medium text-orange-700">⏳ Pending</div>
                 <div className="text-xs text-orange-600">Not returned</div>
               </div>
             )}
@@ -249,44 +259,53 @@ export default function BookingTable({
         );
       case 'comments':
         return (
-          <div className="text-sm text-gray-600 max-w-32 truncate">
+          <div className="text-xs text-gray-600 max-w-32 truncate text-center mx-auto" title={booking.comments || '-'}>
             {booking.comments || '-'}
           </div>
         );
       case 'actions':
         return (
-          <div className="flex flex-col space-y-1">
+          <div className="flex flex-col space-y-1 items-center">
             <button
-              onClick={() => onEdit(booking)}
-              className="text-indigo-600 hover:text-indigo-900 text-xs font-medium transition-colors duration-200 text-left"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(booking);
+              }}
+              className="text-indigo-600 hover:text-indigo-800 text-xs font-medium transition-colors duration-200"
             >
               Edit
             </button>
             <button
-              onClick={() => onDepositReturned(booking)}
-              className={`text-xs font-medium transition-colors duration-200 text-left ${
+              onClick={(e) => {
+                e.stopPropagation();
+                onDepositReturned(booking);
+              }}
+              className={`text-xs font-medium transition-colors duration-200 ${
                 booking.returnedDate 
                   ? 'text-green-600 hover:text-green-800' 
                   : 'text-orange-600 hover:text-orange-800'
               }`}
             >
-              {booking.returnedDate ? 'Update Return' : 'Deposit Returned'}
+              {booking.returnedDate ? 'Update Return' : 'Deposit Return'}
             </button>
             <button
-              onClick={() => booking.id && onDelete(booking.id)}
-              className="text-red-600 hover:text-red-900 text-xs font-medium transition-colors duration-200 text-left"
+              onClick={(e) => {
+                e.stopPropagation();
+                booking.id && onDelete(booking.id);
+              }}
+              className="text-red-600 hover:text-red-800 text-xs font-medium transition-colors duration-200"
             >
               Delete
             </button>
           </div>
         );
       default:
-        return <div>-</div>;
+        return <div className="text-xs">-</div>;
     }
   };
 
   return (
-    <div className="bg-white shadow-xl rounded-2xl overflow-hidden border border-gray-100">
+    <div className="bg-white shadow-lg rounded-lg overflow-hidden border border-gray-200">
       <div className="overflow-x-auto">
         <table className="min-w-full">
           <thead className="bg-gradient-to-r from-indigo-50 to-blue-50">
@@ -295,7 +314,7 @@ export default function BookingTable({
                 <th
                   key={column.key}
                   onClick={() => column.sortable && column.key !== 'actions' && onSort(column.key as keyof Booking)}
-                  className={`px-3 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-wider ${
+                  className={`px-1 py-1.5 text-center text-xs font-bold text-gray-600 uppercase tracking-tight ${
                     column.sortable && column.key !== 'actions'
                       ? 'cursor-pointer hover:bg-indigo-100 transition-colors duration-200 select-none'
                       : ''
@@ -315,14 +334,15 @@ export default function BookingTable({
             {bookings.map((booking, index) => (
               <tr
                 key={booking.id}
-                className={`hover:bg-indigo-50/50 transition-colors duration-200 ${
+                className={`cursor-pointer hover:bg-indigo-50 transition-colors duration-200 ${
                   index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'
                 }`}
               >
                 {columns.map((column) => (
                   <td 
                     key={column.key} 
-                    className={`px-3 py-4 ${column.key === 'actions' ? 'whitespace-nowrap' : ''}`}
+                    onClick={(e) => handleRowClick(booking, column.key, e)}
+                    className={`px-1 py-1.5 text-center ${column.key === 'actions' ? 'whitespace-nowrap' : ''}`}
                   >
                     {getCellContent(booking, column.key)}
                   </td>

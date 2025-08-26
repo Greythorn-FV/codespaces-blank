@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Booking, BulkUploadResult, BookingSearchResult } from '@/types/bookings';
+import { SelectedExtrasType } from '@/types/extrasTypes';
 
 const COLLECTION_NAME = 'bookings';
 
@@ -50,6 +51,7 @@ interface BookingFirestoreDoc {
   additionalIncomeReason: string;
   extras: number;
   extrasType: string;
+  selectedExtrasTypes: SelectedExtrasType[];
   depositToBeCollectedAtBranch: number;
   depositToBeCollectedStatus: string;
   chargesIncome: number;
@@ -205,6 +207,7 @@ export class BookingService {
       additionalIncomeReason: this.safeString(data.additionalIncomeReason) || undefined,
       extras: this.safeNumber(data.extras) || undefined,
       extrasType: this.safeString(data.extrasType) || undefined,
+      selectedExtrasTypes: data.selectedExtrasTypes || [],
       depositToBeCollectedAtBranch: this.safeNumber(data.depositToBeCollectedAtBranch) || undefined,
       depositToBeCollectedStatus: (this.safeString(data.depositToBeCollectedStatus) || undefined) as 'Yes' | 'No' | undefined,
       chargesIncome: this.safeNumber(data.chargesIncome) || undefined,
@@ -262,6 +265,7 @@ export class BookingService {
       additionalIncomeReason: this.safeString(booking.additionalIncomeReason),
       extras: this.safeNumber(booking.extras),
       extrasType: this.safeString(booking.extrasType),
+      selectedExtrasTypes: booking.selectedExtrasTypes || [],
       depositToBeCollectedAtBranch: this.safeNumber(booking.depositToBeCollectedAtBranch),
       depositToBeCollectedStatus: this.safeString(booking.depositToBeCollectedStatus),
       chargesIncome: this.safeNumber(booking.chargesIncome),
@@ -361,6 +365,8 @@ export class BookingService {
             (updateData as any)[key] = Timestamp.fromDate(this.parseFlexibleDate(value));
           } else if (key === 'returnedDate') {
             (updateData as any)[key] = this.parseReturnedDate(value);
+          } else if (key === 'selectedExtrasTypes') {
+            (updateData as any)[key] = value || [];
           } else if (typeof value === 'string') {
             (updateData as any)[key] = this.safeString(value);
           } else if (typeof value === 'number') {

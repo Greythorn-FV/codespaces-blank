@@ -5,11 +5,13 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Booking, BookingFormData } from '@/types/bookings';
+import { SelectedExtrasType } from '@/types/extrasTypes';
 import { BookingService } from '@/services/bookingService';
 import { VehicleService } from '@/services/vehicleService';
 import { GroupAssignmentService } from '@/services/groupAssignmentService';
 import { GroupService } from '@/services/groupService';
 import { useBookingAutoCalculation } from '@/hooks/useBookingAutoCalculation';
+import ExtrasTypeDropdown from './ExtrasTypeDropdown';
 import toast from 'react-hot-toast';
 
 interface BookingFormProps {
@@ -22,6 +24,7 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
   const [isLoading, setIsLoading] = useState(false);
   const [vehicleSuggestions, setVehicleSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedExtrasTypes, setSelectedExtrasTypes] = useState<SelectedExtrasType[]>([]);
   
   const {
     register,
@@ -97,6 +100,53 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
     setValue,
     getValues
   });
+
+  // Initialize selectedExtrasTypes when editing an existing booking
+  useEffect(() => {
+    if (booking?.selectedExtrasTypes && Array.isArray(booking.selectedExtrasTypes)) {
+      setSelectedExtrasTypes(booking.selectedExtrasTypes);
+    } else {
+      setSelectedExtrasTypes([]);
+    }
+  }, [booking]);
+
+  // Calculate extras total based on selected extras types and number of days
+  const calculateExtrasTotal = () => {
+    if (selectedExtrasTypes.length === 0) {
+      return 0;
+    }
+
+    // Use pricing days if available, otherwise calculate from form dates
+    let days = pricing?.numberOfDays;
+    if (!days && pickUpDate && dropOffDate) {
+      days = calculateDays(pickUpDate, dropOffDate);
+    }
+    if (!days) days = 1; // Default to 1 day
+
+    return selectedExtrasTypes.reduce((total, extra) => {
+      return total + (extra.price * days);
+    }, 0);
+  };
+
+  // Auto-calculate extras amount when selected extras change
+  useEffect(() => {
+    // Only auto-calculate if extras types have actually changed
+    // Don't override manual edits unless extras selection changes
+    if (selectedExtrasTypes.length === 0) {
+      setValue('extras', '');
+    } else {
+      const extrasTotal = calculateExtrasTotal();
+      setValue('extras', extrasTotal.toFixed(2));
+    }
+  }, [selectedExtrasTypes, setValue]);
+
+  // Recalculate extras when dates change (only if extras are selected)
+  useEffect(() => {
+    if (selectedExtrasTypes.length > 0 && (pickUpDate && dropOffDate)) {
+      const extrasTotal = calculateExtrasTotal();
+      setValue('extras', extrasTotal.toFixed(2));
+    }
+  }, [pickUpDate, dropOffDate, selectedExtrasTypes, setValue]);
 
   // Auto-calculate "Paid To Us" from revenue fields only (NO DEPOSITS)
   useEffect(() => {
@@ -189,6 +239,19 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
     searchVehicles(value);
   };
 
+  // Handle extras type changes
+  const handleExtrasTypeChange = (newSelectedExtras: SelectedExtrasType[]) => {
+    setSelectedExtrasTypes(newSelectedExtras);
+    
+    // Update the legacy extrasType field for backwards compatibility
+    if (newSelectedExtras.length > 0) {
+      const extrasTypeString = newSelectedExtras.map(extra => extra.name).join(', ');
+      setValue('extrasType', extrasTypeString);
+    } else {
+      setValue('extrasType', '');
+    }
+  };
+
   // Calculate number of days between dates (allow same-day rentals)
   const calculateDays = (startDate: string, endDate: string): number => {
     if (!startDate || !endDate) return 0;
@@ -201,6 +264,16 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
     const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
     
     return diffDays;
+  };
+
+  // Format currency for display
+  const formatCurrency = (amount: number): string => {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2
+    }).format(amount);
   };
 
   const onSubmit = async (data: BookingFormData) => {
@@ -232,7 +305,8 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
         additionalIncome: data.additionalIncome ? parseFloat(data.additionalIncome) : undefined,
         additionalIncomeReason: data.additionalIncomeReason || undefined,
         extras: data.extras ? parseFloat(data.extras) : undefined,
-        extrasType: data.extrasType || undefined,
+        extrasType: data.extrasType || undefined, // Legacy field
+        selectedExtrasTypes: selectedExtrasTypes.length > 0 ? selectedExtrasTypes : undefined, // New structured field
         depositToBeCollectedAtBranch: data.depositToBeCollectedAtBranch ? parseFloat(data.depositToBeCollectedAtBranch) : undefined,
         depositToBeCollectedStatus: data.depositToBeCollectedStatus as 'Yes' | 'No' | undefined,
         chargesIncome: data.chargesIncome ? parseFloat(data.chargesIncome) : undefined,
@@ -727,10 +801,29 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                 />
               </div>
 
-              {/* Extras */}
+              {/* NEW: Extras Type Dropdown - POSITIONED BEFORE EXTRAS AMOUNT */}
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Extras Type
+                  <span className="text-xs text-blue-600 ml-1">(Multi-select)</span>
+                </label>
+                <ExtrasTypeDropdown
+                  value={selectedExtrasTypes}
+                  onChange={handleExtrasTypeChange}
+                  className="w-full"
+                />
+                {selectedExtrasTypes.length > 0 && pricing?.numberOfDays && (
+                  <p className="text-xs text-green-600 mt-1">
+                    Total for {pricing.numberOfDays} day{pricing.numberOfDays !== 1 ? 's' : ''}: {formatCurrency(calculateExtrasTotal())}
+                  </p>
+                )}
+              </div>
+
+              {/* Extras Amount - NOW AUTO-CALCULATED */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Extras
+                  <span className="text-xs text-blue-600 ml-1">(Auto-calculated)</span>
                 </label>
                 <input
                   type="number"
@@ -739,20 +832,16 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                   placeholder="0.00"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Calculated from selected extras × number of days. You can manually adjust this amount.
+                </p>
               </div>
 
-              {/* Extras Type */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Extras Type
-                </label>
-                <input
-                  type="text"
-                  {...register('extrasType')}
-                  placeholder="e.g., GPS, Child seat"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-              </div>
+              {/* Hidden Legacy Extras Type Field - for backwards compatibility */}
+              <input
+                type="hidden"
+                {...register('extrasType')}
+              />
 
               {/* Deposit To Be Collected At Branch */}
               <div>
@@ -808,11 +897,10 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
                   step="0.01"
                   {...register('paidToUs')}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 bg-gray-50"
-                  readOnly
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Sum of all income fields (excluding deposits)
+                  Sum of hire charge, insurance, additional income, extras, and charges income. You can manually adjust this amount.
                 </p>
               </div>
 

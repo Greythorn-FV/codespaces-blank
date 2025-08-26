@@ -1,5 +1,7 @@
 // src/types/bookings.ts
 
+import { SelectedExtrasType } from './extrasTypes';
+
 export interface Booking {
   id?: string;
   
@@ -29,7 +31,8 @@ export interface Booking {
   additionalIncome?: number;
   additionalIncomeReason?: string;
   extras?: number;
-  extrasType?: string;
+  extrasType?: string; // Legacy text field for backwards compatibility
+  selectedExtrasTypes?: SelectedExtrasType[]; // New structured extras
   depositToBeCollectedAtBranch?: number;
   depositToBeCollectedStatus?: 'Yes' | 'No'; // Green/Red status
   chargesIncome?: number;
@@ -69,7 +72,8 @@ export interface BookingFormData {
   additionalIncome: string;
   additionalIncomeReason: string;
   extras: string;
-  extrasType: string;
+  extrasType: string; // Legacy field
+  selectedExtrasTypes: SelectedExtrasType[]; // New structured extras
   depositToBeCollectedAtBranch: string;
   depositToBeCollectedStatus: string;
   chargesIncome: string;

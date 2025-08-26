@@ -90,6 +90,11 @@ export function useBookingAutoCalculation({
         vehicleInfo,
         loading: false
       }));
+
+      // IMPORTANT: Reset dates ref when vehicle info changes
+      // This ensures that pricing recalculates when vehicle changes
+      lastProcessedDates.current = '';
+      
     } catch (error) {
       setState(prev => ({
         ...prev,
@@ -123,14 +128,13 @@ export function useBookingAutoCalculation({
 
       if (result.success && result.pricing) {
         const currentHireCharge = getValues('hireChargeInclVat');
-        if (!currentHireCharge || currentHireCharge === '0' || currentHireCharge === '') {
-          setValue('hireChargeInclVat', result.pricing.totalHireCharge.toFixed(2));
-          
-          toast.success(
-            `Calculated: ${result.pricing.numberOfDays} days × £${result.pricing.dailyRate} = £${result.pricing.totalHireCharge.toFixed(2)}`,
-            { duration: 3000 }
-          );
-        }
+        // Always update the hire charge when pricing changes
+        setValue('hireChargeInclVat', result.pricing.totalHireCharge.toFixed(2));
+        
+        toast.success(
+          `Calculated: ${result.pricing.numberOfDays} days × £${result.pricing.dailyRate} = £${result.pricing.totalHireCharge.toFixed(2)}`,
+          { duration: 3000 }
+        );
       }
     } catch (error) {
       setState(prev => ({
@@ -156,6 +160,7 @@ export function useBookingAutoCalculation({
 
     if (currentReg.length < 3) {
       lastProcessedReg.current = '';
+      lastProcessedDates.current = ''; // Reset dates tracking
       setState({
         loading: false,
         vehicleInfo: null,
@@ -174,16 +179,20 @@ export function useBookingAutoCalculation({
 
   }, [registration, clearAllTimeouts, processRegistration, setValue]);
 
-  // Handle date changes
+  // Handle date changes - FIXED VERSION
   useEffect(() => {
     const datesKey = `${pickUpDate}|${dropOffDate}`;
     
-    if (lastProcessedDates.current === datesKey) {
-      return; // Already processed these dates
+    // Skip if dates are empty or invalid
+    if (!pickUpDate || !dropOffDate || !registration || !state.vehicleInfo?.group) {
+      return;
     }
 
-    if (!pickUpDate || !dropOffDate || !registration || !state.vehicleInfo?.group) {
-      return; // Not ready for pricing calculation
+    // FIXED: Always process if dates are different OR if this is the first pricing calculation
+    const shouldProcess = lastProcessedDates.current !== datesKey || !state.pricing;
+    
+    if (!shouldProcess) {
+      return;
     }
 
     clearAllTimeouts();
@@ -193,12 +202,14 @@ export function useBookingAutoCalculation({
       processPricing(registration, pickUpDate, dropOffDate);
     }, 500);
 
-  }, [pickUpDate, dropOffDate, registration, state.vehicleInfo?.group, clearAllTimeouts, processPricing]);
+  }, [pickUpDate, dropOffDate, registration, state.vehicleInfo?.group, state.pricing, clearAllTimeouts, processPricing]);
 
-  // Manual recalculation
+  // Manual recalculation - ENHANCED VERSION
   const recalculate = useCallback(() => {
     if (registration && pickUpDate && dropOffDate) {
       clearAllTimeouts();
+      
+      // Reset all tracking refs to force recalculation
       lastProcessedReg.current = '';
       lastProcessedDates.current = '';
       
@@ -223,7 +234,9 @@ export function useBookingAutoCalculation({
       days: state.pricing.numberOfDays,
       dailyRate: state.pricing.dailyRate,
       total: state.pricing.totalHireCharge,
-      calculation: BookingPricingService.formatPricingDisplay(state.pricing)
+      calculation: BookingPricingService.formatPricingDisplay ? 
+        BookingPricingService.formatPricingDisplay(state.pricing) : 
+        `${state.pricing.numberOfDays} days × £${state.pricing.dailyRate} = £${state.pricing.totalHireCharge.toFixed(2)}`
     };
   }, [state.pricing, state.vehicleInfo]);
 
