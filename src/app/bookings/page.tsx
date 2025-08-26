@@ -17,6 +17,7 @@ import { DocumentSnapshot } from 'firebase/firestore';
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,26 +65,58 @@ export default function BookingsPage() {
     loadBookings(true);
   }, [sortField, sortDirection]);
 
-  // Search bookings
+  // Enhanced search bookings - searches across ALL specified fields
   const handleSearch = async () => {
-    if (!searchTerm.trim()) {
+    const trimmedSearchTerm = searchTerm.trim();
+    
+    if (!trimmedSearchTerm) {
+      // Clear search and reload all bookings
       setLastDoc(null);
+      setHasMore(true);
       loadBookings(true);
       return;
     }
 
     try {
+      setSearching(true);
       setLoading(true);
-      const results = await BookingService.searchBookings(searchTerm);
+      const results = await BookingService.searchBookings(trimmedSearchTerm);
       setBookings(results);
       setHasMore(false);
       setLastDoc(null);
+      
+      if (results.length === 0) {
+        toast(`No bookings found for "${trimmedSearchTerm}"`, {
+          icon: '🔍',
+        });
+      } else {
+        toast.success(`Found ${results.length} booking${results.length === 1 ? '' : 's'}`);
+      }
     } catch (error) {
-      toast.error('Search failed');
+      toast.error('Search failed. Please try again.');
       console.error(error);
     } finally {
+      setSearching(false);
       setLoading(false);
     }
+  };
+
+  // Handle search input key press
+  const handleSearchKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
+  // Clear search
+  const handleClearSearch = () => {
+    setSearchTerm('');
+    setLastDoc(null);
+    setHasMore(true);
+    loadBookings(true);
+    toast('Search cleared', {
+      icon: '✨',
+    });
   };
 
   // Download template
@@ -112,9 +145,8 @@ export default function BookingsPage() {
 
     try {
       await BookingService.deleteBooking(id);
+      setBookings(prev => prev.filter(b => b.id !== id));
       toast.success('Booking deleted successfully');
-      setLastDoc(null);
-      loadBookings(true);
     } catch (error) {
       toast.error('Failed to delete booking');
       console.error(error);
@@ -131,8 +163,17 @@ export default function BookingsPage() {
   const handleFormSuccess = () => {
     setShowAddForm(false);
     setEditingBooking(null);
-    setLastDoc(null);
-    loadBookings(true);
+    
+    // If we're in search mode, re-run the search to include the new/updated booking
+    if (searchTerm.trim()) {
+      handleSearch();
+    } else {
+      // Otherwise reload bookings
+      setLastDoc(null);
+      loadBookings(true);
+    }
+    
+    toast.success(editingBooking ? 'Booking updated successfully' : 'Booking added successfully');
   };
 
   // Handle bulk upload success
@@ -146,8 +187,14 @@ export default function BookingsPage() {
   const handleDepositModalSuccess = () => {
     setShowDepositModal(false);
     setDepositBooking(null);
-    setLastDoc(null);
-    loadBookings(true);
+    
+    // Refresh the bookings
+    if (searchTerm.trim()) {
+      handleSearch();
+    } else {
+      setLastDoc(null);
+      loadBookings(true);
+    }
   };
 
   // Handle sort
@@ -200,7 +247,10 @@ export default function BookingsPage() {
               <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                 Bookings Management
               </h1>
-              <p className="text-gray-600 mt-2">Manage your vehicle bookings efficiently</p>
+              <p className="text-gray-600 mt-2">
+                Manage your vehicle bookings efficiently - {bookings.length} booking{bookings.length === 1 ? '' : 's'}
+                {searchTerm.trim() && ` matching "${searchTerm.trim()}"`}
+              </p>
             </div>
             <div className="flex space-x-3">
               <button
@@ -249,32 +299,38 @@ export default function BookingsPage() {
           {/* Search and View Toggle */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center space-y-4 sm:space-y-0 mb-4">
             <div className="flex items-center space-x-4 flex-1">
-              <div className="flex-1 relative max-w-md">
+              <div className="flex-1 relative max-w-lg">
                 <input
                   type="text"
-                  placeholder="Search by coastr reference, customer name, or registration..."
+                  placeholder="Search by Coastr Ref, SAGE INV, Customer, Phone, Registration, or Comments..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
+                  onKeyPress={handleSearchKeyPress}
                   className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 />
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <span className="text-gray-400">🔍</span>
                 </div>
+                {searchTerm.trim() && (
+                  <button
+                    onClick={handleClearSearch}
+                    className="absolute inset-y-0 right-16 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Clear search"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
               <button
                 onClick={handleSearch}
-                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                disabled={searching}
+                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                Search
+                {searching ? 'Searching...' : 'Search'}
               </button>
-              {searchTerm && (
+              {searchTerm.trim() && (
                 <button
-                  onClick={() => {
-                    setSearchTerm('');
-                    setLastDoc(null);
-                    loadBookings(true);
-                  }}
+                  onClick={handleClearSearch}
                   className="px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
                 >
                   Clear
@@ -307,11 +363,38 @@ export default function BookingsPage() {
             </div>
           </div>
 
+
+
+          {/* Search Results Summary */}
+          {searchTerm.trim() && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="text-blue-600 font-medium">🔍</span>
+                  <span className="text-blue-800 font-medium">
+                    Search Results for "{searchTerm.trim()}"
+                  </span>
+                  <span className="text-blue-600 bg-blue-100 px-2 py-1 rounded-full text-sm">
+                    {bookings.length} result{bookings.length === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <button
+                  onClick={handleClearSearch}
+                  className="text-blue-600 hover:text-blue-800 font-medium text-sm transition-colors duration-200"
+                >
+                  Clear Search
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Statistics */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="bg-blue-50 rounded-lg p-4">
               <div className="text-2xl font-bold text-blue-600">{bookings.length}</div>
-              <div className="text-sm text-blue-600">Total Bookings</div>
+              <div className="text-sm text-blue-600">
+                {searchTerm.trim() ? 'Found Bookings' : 'Total Bookings'}
+              </div>
             </div>
             <div className="bg-green-50 rounded-lg p-4">
               <div className="text-2xl font-bold text-green-600">
@@ -329,7 +412,7 @@ export default function BookingsPage() {
               <div className="text-2xl font-bold text-orange-600">
                 {bookings.filter(b => !b.returnedDate && b.depositToBeCollectedAtBranch && b.depositToBeCollectedAtBranch > 0).length}
               </div>
-              <div className="text-sm text-orange-600">Deposits pending Return</div>
+              <div className="text-sm text-orange-600">Deposits Pending Return</div>
             </div>
           </div>
 
@@ -348,7 +431,9 @@ export default function BookingsPage() {
         {loading && bookings.length === 0 ? (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="mt-2 text-gray-600">Loading bookings...</p>
+            <p className="mt-2 text-gray-600">
+              {searching ? 'Searching bookings...' : 'Loading bookings...'}
+            </p>
           </div>
         ) : bookings.length === 0 ? (
           <div className="text-center py-12 bg-white rounded-lg shadow">
@@ -356,23 +441,34 @@ export default function BookingsPage() {
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No Bookings Found</h3>
             <p className="text-gray-600 mb-6">
               {searchTerm.trim() 
-                ? `No bookings match "${searchTerm}". Try a different search term.`
+                ? `No bookings match "${searchTerm.trim()}". Try a different search term or check your spelling.`
                 : "Get started by adding your first booking or uploading bulk data."
               }
             </p>
             <div className="flex justify-center space-x-3">
-              <button
-                onClick={() => setShowAddForm(true)}
-                className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-              >
-                Add First Booking
-              </button>
-              <button
-                onClick={() => setShowBulkUpload(true)}
-                className="px-6 py-3 bg-purple-100 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
-              >
-                Bulk Upload
-              </button>
+              {searchTerm.trim() ? (
+                <button
+                  onClick={handleClearSearch}
+                  className="px-6 py-3 bg-gray-500 text-white rounded-lg hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 transition-colors"
+                >
+                  Clear Search
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() => setShowAddForm(true)}
+                    className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                  >
+                    Add First Booking
+                  </button>
+                  <button
+                    onClick={() => setShowBulkUpload(true)}
+                    className="px-6 py-3 bg-purple-100 text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 transition-colors"
+                  >
+                    Bulk Upload
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -388,15 +484,22 @@ export default function BookingsPage() {
               viewMode={viewMode}
             />
             
-            {/* Load More Button */}
-            {hasMore && (
+            {/* Load More Button - Only show if not searching and has more results */}
+            {hasMore && !searchTerm.trim() && (
               <div className="mt-8 text-center">
                 <button
                   onClick={() => loadBookings(false)}
                   disabled={loading}
                   className="px-6 py-3 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
                 >
-                  {loading ? 'Loading...' : 'Load More Bookings'}
+                  {loading ? (
+                    <>
+                      <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                      Loading More...
+                    </>
+                  ) : (
+                    'Load More Bookings'
+                  )}
                 </button>
               </div>
             )}

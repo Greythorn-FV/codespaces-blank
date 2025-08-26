@@ -16,7 +16,6 @@ import {
   Timestamp,
   writeBatch,
   DocumentSnapshot,
-  AddPrefixToKeys
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { Booking, BulkUploadResult, BookingSearchResult } from '@/types/bookings';
@@ -53,6 +52,7 @@ interface BookingFirestoreDoc {
   extrasType: string;
   selectedExtrasTypes: SelectedExtrasType[];
   depositToBeCollectedAtBranch: number;
+  // In Firestore păstrăm string simplu, dar în Booking (app) îl tratăm ca union "Yes" | "No" | undefined
   depositToBeCollectedStatus: string;
   chargesIncome: number;
   paidToUs: number;
@@ -94,7 +94,7 @@ export class BookingService {
     }
     
     // If it's a Timestamp
-    if (dateInput.toDate && typeof dateInput.toDate === 'function') {
+    if (dateInput?.toDate && typeof dateInput.toDate === 'function') {
       return dateInput.toDate();
     }
     
@@ -161,86 +161,92 @@ export class BookingService {
   private static convertToBooking(docSnapshot: DocumentSnapshot, data: any): Booking {
     const safeDate = (field: any) => {
       try {
-        if (field && field.toDate) return field.toDate();
+        if (field && typeof field.toDate === 'function') return field.toDate();
         return this.parseFlexibleDate(field);
-      } catch (error) {
+      } catch {
         return new Date();
       }
     };
 
     const safeReturnedDate = (field: any) => {
-      if (!field) return null;
+      if (!field) return undefined;
       if (typeof field === 'string') return field;
       try {
-        if (field.toDate) return field.toDate();
+        if (field?.toDate) return field.toDate();
         return this.parseFlexibleDate(field);
-      } catch (error) {
-        return String(field);
+      } catch {
+        return undefined;
       }
     };
+
+    // mapăm statusul la union-ul cerut de tipul Booking
+    const rawStatus = this.safeString(data.depositToBeCollectedStatus);
+    const mappedStatus: 'Yes' | 'No' | undefined =
+      rawStatus === 'Yes' ? 'Yes' : rawStatus === 'No' ? 'No' : undefined;
 
     return {
       id: docSnapshot.id,
       bookingConfirmationDate: safeDate(data.bookingConfirmationDate),
-      supplier: this.safeString(data.supplier) || undefined,
-      reference: this.safeString(data.reference) || undefined,
+      supplier: this.safeString(data.supplier),
+      reference: this.safeString(data.reference),
       coastrReference: this.safeString(data.coastrReference),
-      sageInv: this.safeString(data.sageInv) || undefined,
-      notes: this.safeString(data.notes) || undefined,
+      sageInv: this.safeString(data.sageInv),
+      notes: this.safeString(data.notes),
       customerName: this.safeString(data.customerName),
       phoneNumber: this.safeString(data.phoneNumber),
-      group: this.safeString(data.group) || undefined,
+      group: this.safeString(data.group),
       registration: this.safeString(data.registration),
-      make: this.safeString(data.make) || undefined,
-      model: this.safeString(data.model) || undefined,
-      makeModel: data.make && data.model ? `${data.make} ${data.model}` : (data.make || data.model || undefined),
+      make: this.safeString(data.make),
+      model: this.safeString(data.model),
+      makeModel: this.safeString(data.make && data.model ? `${data.make} ${data.model}` : data.makeModel),
       pickUpDate: safeDate(data.pickUpDate),
       pickUpTime: this.safeString(data.pickUpTime),
       pickUpLocation: this.safeString(data.pickUpLocation),
       dropOffDate: safeDate(data.dropOffDate),
       dropOffTime: this.safeString(data.dropOffTime),
       dropOffLocation: this.safeString(data.dropOffLocation),
-      noOfDays: this.safeNumber(data.noOfDays) || undefined,
-      hireChargeInclVat: this.safeNumber(data.hireChargeInclVat) || undefined,
-      insurance: this.safeNumber(data.insurance) || undefined,
-      additionalIncome: this.safeNumber(data.additionalIncome) || undefined,
-      additionalIncomeReason: this.safeString(data.additionalIncomeReason) || undefined,
-      extras: this.safeNumber(data.extras) || undefined,
-      extrasType: this.safeString(data.extrasType) || undefined,
+      noOfDays: this.safeNumber(data.noOfDays),
+      hireChargeInclVat: this.safeNumber(data.hireChargeInclVat),
+      insurance: this.safeNumber(data.insurance),
+      additionalIncome: this.safeNumber(data.additionalIncome),
+      additionalIncomeReason: this.safeString(data.additionalIncomeReason),
+      extras: this.safeNumber(data.extras),
+      extrasType: this.safeString(data.extrasType),
       selectedExtrasTypes: data.selectedExtrasTypes || [],
-      depositToBeCollectedAtBranch: this.safeNumber(data.depositToBeCollectedAtBranch) || undefined,
-      depositToBeCollectedStatus: (this.safeString(data.depositToBeCollectedStatus) || undefined) as 'Yes' | 'No' | undefined,
-      chargesIncome: this.safeNumber(data.chargesIncome) || undefined,
-      paidToUs: this.safeNumber(data.paidToUs) || undefined,
-      deposit: this.safeNumber(data.deposit) || undefined,
+      depositToBeCollectedAtBranch: this.safeNumber(data.depositToBeCollectedAtBranch),
+      depositToBeCollectedStatus: mappedStatus,
+      chargesIncome: this.safeNumber(data.chargesIncome),
+      paidToUs: this.safeNumber(data.paidToUs),
+      deposit: this.safeNumber(data.deposit),
       returnedDate: safeReturnedDate(data.returnedDate),
-      comments: this.safeString(data.comments) || undefined,
+      comments: this.safeString(data.comments),
       createdAt: safeDate(data.createdAt),
       updatedAt: safeDate(data.updatedAt),
       createdBy: this.safeString(data.createdBy),
-      lastModifiedBy: this.safeString(data.lastModifiedBy)
+      lastModifiedBy: this.safeString(data.lastModifiedBy),
     };
   }
 
-  // Auto-calculate number of days between pickup and dropoff
-  private static calculateDays(pickupDate: Date, dropoffDate: Date): number {
-    try {
-      const timeDiff = dropoffDate.getTime() - pickupDate.getTime();
-      const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-      return Math.max(1, daysDiff); // Minimum 1 day
-    } catch (error) {
-      return 1; // Default to 1 day if calculation fails
-    }
-  }
-
-  // Prepare safe booking data for Firestore (NO undefined values)
+  // Prepare safe data for Firestore - ensure NO undefined values
   private static prepareSafeBookingData(booking: any): BookingFirestoreDoc {
     const pickUpDate = this.parseFlexibleDate(booking.pickUpDate);
     const dropOffDate = this.parseFlexibleDate(booking.dropOffDate);
-    const noOfDays = this.calculateDays(pickUpDate, dropOffDate);
-    
+    const bookingConfirmationDate = this.parseFlexibleDate(booking.bookingConfirmationDate);
+
+    // Calculate number of days if not provided
+    let noOfDays = this.safeNumber(booking.noOfDays);
+    if (!noOfDays && pickUpDate && dropOffDate) {
+      const timeDiff = dropOffDate.getTime() - pickUpDate.getTime();
+      noOfDays = Math.max(1, Math.ceil(timeDiff / (1000 * 3600 * 24)));
+    }
+
+    // mapăm union-ul din app către string pentru Firestore
+    const statusUnion = booking.depositToBeCollectedStatus as 'Yes' | 'No' | undefined;
+    const statusForFirestore =
+      statusUnion === 'Yes' ? 'Yes' : statusUnion === 'No' ? 'No' : '';
+
     return {
-      bookingConfirmationDate: Timestamp.fromDate(this.parseFlexibleDate(booking.bookingConfirmationDate)),
+      bookingConfirmationDate: Timestamp.fromDate(bookingConfirmationDate),
       supplier: this.safeString(booking.supplier),
       reference: this.safeString(booking.reference),
       coastrReference: this.safeString(booking.coastrReference),
@@ -249,7 +255,7 @@ export class BookingService {
       customerName: this.safeString(booking.customerName),
       phoneNumber: this.safeString(booking.phoneNumber),
       group: this.safeString(booking.group),
-      registration: this.safeString(booking.registration).toUpperCase(),
+      registration: this.safeString(booking.registration),
       make: this.safeString(booking.make),
       model: this.safeString(booking.model),
       pickUpDate: Timestamp.fromDate(pickUpDate),
@@ -267,7 +273,7 @@ export class BookingService {
       extrasType: this.safeString(booking.extrasType),
       selectedExtrasTypes: booking.selectedExtrasTypes || [],
       depositToBeCollectedAtBranch: this.safeNumber(booking.depositToBeCollectedAtBranch),
-      depositToBeCollectedStatus: this.safeString(booking.depositToBeCollectedStatus),
+      depositToBeCollectedStatus: statusForFirestore,
       chargesIncome: this.safeNumber(booking.chargesIncome),
       paidToUs: this.safeNumber(booking.paidToUs),
       deposit: this.safeNumber(booking.deposit),
@@ -367,6 +373,10 @@ export class BookingService {
             (updateData as any)[key] = this.parseReturnedDate(value);
           } else if (key === 'selectedExtrasTypes') {
             (updateData as any)[key] = value || [];
+          } else if (key === 'depositToBeCollectedStatus') {
+            // acceptă doar 'Yes' sau 'No' în Firestore; altfel gol
+            const v = typeof value === 'string' ? value.trim() : '';
+            (updateData as any)[key] = v === 'Yes' ? 'Yes' : v === 'No' ? 'No' : '';
           } else if (typeof value === 'string') {
             (updateData as any)[key] = this.safeString(value);
           } else if (typeof value === 'number') {
@@ -399,52 +409,142 @@ export class BookingService {
     }
   }
 
-  // Search bookings
+  // Enhanced search bookings - searches across ALL specified fields
   static async searchBookings(searchTerm: string): Promise<Booking[]> {
     try {
       const bookings: Booking[] = [];
-      const searchLower = searchTerm.toLowerCase();
+      const searchLower = searchTerm.toLowerCase().trim();
+      const searchUpper = searchTerm.toUpperCase().trim();
+      const addedIds = new Set<string>(); // To prevent duplicates
 
-      // Search by coastr reference
-      const coastrQuery = query(
-        collection(db, COLLECTION_NAME),
-        where('coastrReference', '>=', searchTerm),
-        where('coastrReference', '<=', searchTerm + '\uf8ff'),
-        limit(50)
-      );
-      const coastrSnapshot = await getDocs(coastrQuery);
-      coastrSnapshot.forEach(doc => {
-        bookings.push(this.convertToBooking(doc, doc.data()));
-      });
+      if (!searchTerm.trim()) {
+        return bookings;
+      }
 
-      // Search by customer name
-      const customerQuery = query(
-        collection(db, COLLECTION_NAME),
-        where('customerName', '>=', searchTerm),
-        where('customerName', '<=', searchTerm + '\uf8ff'),
-        limit(50)
-      );
-      const customerSnapshot = await getDocs(customerQuery);
-      customerSnapshot.forEach(doc => {
-        const booking = this.convertToBooking(doc, doc.data());
-        if (!bookings.find(b => b.id === booking.id)) {
-          bookings.push(booking);
+      // Helper function to add booking if not already added
+      const addBookingIfUnique = (docSnapshot: DocumentSnapshot) => {
+        if (!addedIds.has(docSnapshot.id)) {
+          addedIds.add(docSnapshot.id);
+          bookings.push(this.convertToBooking(docSnapshot, docSnapshot.data()));
         }
-      });
+      };
 
-      // Search by registration
-      const regQuery = query(
-        collection(db, COLLECTION_NAME),
-        where('registration', '>=', searchTerm.toUpperCase()),
-        where('registration', '<=', searchTerm.toUpperCase() + '\uf8ff'),
-        limit(50)
-      );
-      const regSnapshot = await getDocs(regQuery);
-      regSnapshot.forEach(doc => {
-        const booking = this.convertToBooking(doc, doc.data());
-        if (!bookings.find(b => b.id === booking.id)) {
-          bookings.push(booking);
+      // Search by coastr reference (case sensitive prefix match)
+      try {
+        const coastrQuery = query(
+          collection(db, COLLECTION_NAME),
+          where('coastrReference', '>=', searchTerm),
+          where('coastrReference', '<=', searchTerm + '\uf8ff'),
+          limit(20)
+        );
+        const coastrSnapshot = await getDocs(coastrQuery);
+        coastrSnapshot.forEach(addBookingIfUnique);
+      } catch (error) {
+        console.log('Coastr reference search failed:', error);
+      }
+
+      // Search by SAGE Invoice (case sensitive prefix match)
+      try {
+        const sageQuery = query(
+          collection(db, COLLECTION_NAME),
+          where('sageInv', '>=', searchTerm),
+          where('sageInv', '<=', searchTerm + '\uf8ff'),
+          limit(20)
+        );
+        const sageSnapshot = await getDocs(sageQuery);
+        sageSnapshot.forEach(addBookingIfUnique);
+      } catch (error) {
+        console.log('SAGE Invoice search failed:', error);
+      }
+
+      // Search by customer name (case sensitive prefix match)
+      try {
+        const customerQuery = query(
+          collection(db, COLLECTION_NAME),
+          where('customerName', '>=', searchTerm),
+          where('customerName', '<=', searchTerm + '\uf8ff'),
+          limit(20)
+        );
+        const customerSnapshot = await getDocs(customerQuery);
+        customerSnapshot.forEach(addBookingIfUnique);
+      } catch (error) {
+        console.log('Customer name search failed:', error);
+      }
+
+      // Search by phone number (try both as-is and cleaned version)
+      try {
+        const phoneClean = searchTerm.replace(/\s+/g, '');
+        
+        // Search with original term
+        const phoneQuery1 = query(
+          collection(db, COLLECTION_NAME),
+          where('phoneNumber', '>=', searchTerm),
+          where('phoneNumber', '<=', searchTerm + '\uf8ff'),
+          limit(20)
+        );
+        const phoneSnapshot1 = await getDocs(phoneQuery1);
+        phoneSnapshot1.forEach(addBookingIfUnique);
+
+        // Search with cleaned version if different
+        if (phoneClean !== searchTerm) {
+          const phoneQuery2 = query(
+            collection(db, COLLECTION_NAME),
+            where('phoneNumber', '>=', phoneClean),
+            where('phoneNumber', '<=', phoneClean + '\uf8ff'),
+            limit(20)
+          );
+          const phoneSnapshot2 = await getDocs(phoneQuery2);
+          phoneSnapshot2.forEach(addBookingIfUnique);
         }
+      } catch (error) {
+        console.log('Phone number search failed:', error);
+      }
+
+      // Search by vehicle registration (uppercase prefix match)
+      try {
+        const regQuery = query(
+          collection(db, COLLECTION_NAME),
+          where('registration', '>=', searchUpper),
+          where('registration', '<=', searchUpper + '\uf8ff'),
+          limit(20)
+        );
+        const regSnapshot = await getDocs(regQuery);
+        regSnapshot.forEach(addBookingIfUnique);
+      } catch (error) {
+        console.log('Registration search failed:', error);
+      }
+
+      // For comments search, we need to get all bookings and filter client-side
+      // This is less efficient but necessary for partial text matches
+      if (bookings.length < 50) { // Only do this expensive operation if we don't have many results
+        try {
+          const allBookingsQuery = query(
+            collection(db, COLLECTION_NAME),
+            limit(1000) // Reasonable limit to prevent excessive reads
+          );
+          const allSnapshot = await getDocs(allBookingsQuery);
+          
+          allSnapshot.forEach((docSnapshot) => {
+            if (!addedIds.has(docSnapshot.id)) {
+              const data = docSnapshot.data();
+              const comments = this.safeString(data.comments).toLowerCase();
+              
+              // Check if search term is found in comments
+              if (comments.includes(searchLower)) {
+                addBookingIfUnique(docSnapshot);
+              }
+            }
+          });
+        } catch (error) {
+          console.log('Comments search failed:', error);
+        }
+      }
+
+      // Sort results by most recent booking confirmation date
+      bookings.sort((a, b) => {
+        const dateA = a.bookingConfirmationDate?.getTime() || 0;
+        const dateB = b.bookingConfirmationDate?.getTime() || 0;
+        return dateB - dateA;
       });
 
       return bookings;
@@ -494,16 +594,17 @@ export class BookingService {
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           result.failed++;
+          // NU mai trimitem câmpul 'data' dacă tipul tău nu îl definește;
+          // pune-l opțional în tip (vezi secțiunea types/bookings.ts de mai jos) sau comentează linia următoare
           result.errors.push({
-            row: i + 2, // +2 for header row and 0-index
-            booking: this.safeString(bookings[i].coastrReference) || `Row ${i + 2}`,
-            error: errorMessage
-          });
-          console.warn(`Row ${i + 2} failed:`, errorMessage, bookings[i]);
+            row: i + 1,
+            error: errorMessage,
+            data: bookings[i] // <- dacă nu vrei 'data' în rezultat, șterge această linie și actualizează tipul
+          } as any);
         }
       }
 
-      // Commit remaining items
+      // Commit any remaining items in the batch
       if (batchCount > 0) {
         await batch.commit();
       }
@@ -515,43 +616,35 @@ export class BookingService {
     }
   }
 
-  // Get all bookings for export
-  static async getAllBookingsForExport(): Promise<Booking[]> {
-    try {
-      const q = query(
-        collection(db, COLLECTION_NAME),
-        orderBy('bookingConfirmationDate', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      const bookings: Booking[] = [];
-      
-      snapshot.forEach((docSnapshot) => {
-        const data = docSnapshot.data();
-        bookings.push(this.convertToBooking(docSnapshot, data));
-      });
-
-      return bookings;
-    } catch (error) {
-      console.error('Error fetching all bookings:', error);
-      throw new Error('Failed to fetch bookings for export');
-    }
-  }
-
-  // Clear all bookings (DANGER!)
+  // Clear all bookings - WARNING: This deletes ALL bookings
   static async clearAllBookings(): Promise<void> {
     try {
-      const q = query(collection(db, COLLECTION_NAME));
-      const snapshot = await getDocs(q);
+      // Get all bookings in batches and delete them
+      const batchSize = 500;
+      let hasMore = true;
       
-      const batch = writeBatch(db);
-      snapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      
-      await batch.commit();
+      while (hasMore) {
+        const q = query(collection(db, COLLECTION_NAME), limit(batchSize));
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.empty) {
+          hasMore = false;
+          break;
+        }
+
+        const batch = writeBatch(db);
+        snapshot.docs.forEach((doc) => {
+          batch.delete(doc.ref);
+        });
+        
+        await batch.commit();
+        
+        // If we got fewer docs than the batch size, we're done
+        hasMore = snapshot.docs.length === batchSize;
+      }
     } catch (error) {
       console.error('Error clearing all bookings:', error);
-      throw new Error('Failed to clear bookings');
+      throw new Error('Failed to clear all bookings');
     }
   }
 }
