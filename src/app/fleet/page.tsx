@@ -9,10 +9,13 @@ import { ExcelUtils } from '@/utils/excelUtils';
 import VehicleForm from '@/components/VehicleForm';
 import VehicleTable from '@/components/VehicleTable';
 import BulkUploadModal from '@/components/BulkUploadModal';
+import AuthGuard from '@/components/AuthGuard';
+import { useAuth } from '@/contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 import { DocumentSnapshot } from 'firebase/firestore';
 
-export default function FleetPage() {
+function FleetPage() {
+  const { user } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastDoc, setLastDoc] = useState<DocumentSnapshot | null>(null);
@@ -303,7 +306,7 @@ export default function FleetPage() {
                 <button
                   onClick={handleLoadMore}
                   disabled={loading}
-                  className="px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity- 0 disabled:cursor-not-allowed"
+                  className="px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Loading...' : 'Load More'}
                 </button>
@@ -315,7 +318,7 @@ export default function FleetPage() {
 
       {/* Add/Edit Form Modal */}
       {(showAddForm || editingVehicle) && (
-        <div className="fixed inset-0 bg-transparent bg-opacity- 0 flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <h2 className="text-2xl font-bold mb-6">
@@ -342,5 +345,14 @@ export default function FleetPage() {
         />
       )}
     </div>
+  );
+}
+
+// Export with AuthGuard protection - THIS IS THE KEY ADDITION
+export default function ProtectedFleetPage() {
+  return (
+    <AuthGuard requiredPermission="canManageFleet">
+      <FleetPage />
+    </AuthGuard>
   );
 }

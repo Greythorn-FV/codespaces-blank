@@ -11,9 +11,12 @@ import { GroupAssignmentService } from '@/services/groupAssignmentService';
 import { VehicleService } from '@/services/vehicleService';
 import VehicleDropdown from '@/components/VehicleDropdown';
 import AssignedVehicleList from '@/components/AssignedVehicleList';
+import AuthGuard from '@/components/AuthGuard';
+import { useAuth } from '@/contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 
-export default function VehicleAssignmentPage() {
+function VehicleAssignmentPage() {
+  const { user } = useAuth();
   const params = useParams();
   const router = useRouter();
   const groupId = params.groupId as string;
@@ -233,5 +236,14 @@ export default function VehicleAssignmentPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Export with AuthGuard protection - THIS IS THE KEY ADDITION
+export default function ProtectedVehicleAssignmentPage() {
+  return (
+    <AuthGuard requiredPermission="canManageSettings">
+      <VehicleAssignmentPage />
+    </AuthGuard>
   );
 }

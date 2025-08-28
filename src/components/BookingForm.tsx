@@ -20,6 +20,92 @@ interface BookingFormProps {
   onCancel: () => void;
 }
 
+// Custom Time Component with separate hour and minute dropdowns
+interface TimeSeparateProps {
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+}
+
+const TimeSeparate = ({ value, onChange, className = '' }: TimeSeparateProps) => {
+  // Parse existing time value
+  const [hour, minute] = value ? value.split(':') : ['', ''];
+  
+  // Generate hour options (00-23)
+  const hourOptions = Array.from({ length: 24 }, (_, i) => ({
+    value: i.toString().padStart(2, '0'),
+    label: i.toString().padStart(2, '0')
+  }));
+
+  // Generate minute options (only 00, 15, 30, 45)
+  const minuteOptions = [
+    { value: '00', label: '00' },
+    { value: '15', label: '15' },
+    { value: '30', label: '30' },
+    { value: '45', label: '45' }
+  ];
+
+  const handleHourChange = (newHour: string) => {
+    if (newHour && minute) {
+      onChange(`${newHour}:${minute}`);
+    } else if (newHour) {
+      onChange(`${newHour}:`);
+    } else {
+      onChange('');
+    }
+  };
+
+  const handleMinuteChange = (newMinute: string) => {
+    if (hour && newMinute) {
+      onChange(`${hour}:${newMinute}`);
+    } else if (newMinute && !hour) {
+      onChange('');
+    } else {
+      if (hour) {
+        onChange(`${hour}:`);
+      } else {
+        onChange('');
+      }
+    }
+  };
+
+  return (
+    <div className={`flex space-x-2 ${className}`}>
+      <div className="flex-1">
+        <select
+          value={hour || ''}
+          onChange={(e) => handleHourChange(e.target.value)}
+          className="w-full px-3 py-2.5 bg-white border border-gray-200 rounded-lg text-sm font-medium text-gray-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-300"
+        >
+          <option value="">--</option>
+          {hourOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="flex-shrink-0 flex items-center">
+        <span className="text-gray-400 font-semibold text-lg">:</span>
+      </div>
+      <div className="flex-1">
+        <select
+          value={minute || ''}
+          onChange={(e) => handleMinuteChange(e.target.value)}
+          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+        >
+          <option value="">--</option>
+          {minuteOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+};
+
 export default function BookingForm({ booking, onSuccess, onCancel }: BookingFormProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [vehicleSuggestions, setVehicleSuggestions] = useState<any[]>([]);
@@ -32,7 +118,9 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
     formState: { errors },
     watch,
     setValue,
-    getValues
+    getValues,
+    setError,
+    clearErrors
   } = useForm<BookingFormData>({
     defaultValues: {
       bookingConfirmationDate: booking?.bookingConfirmationDate ? 
@@ -79,11 +167,30 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
   const registration = watch('registration');
   const pickUpDate = watch('pickUpDate');
   const dropOffDate = watch('dropOffDate');
+  const pickUpTime = watch('pickUpTime');
+  const dropOffTime = watch('dropOffTime');
   const hireChargeInclVat = watch('hireChargeInclVat');
   const insurance = watch('insurance');
   const additionalIncome = watch('additionalIncome');
   const extras = watch('extras');
   const chargesIncome = watch('chargesIncome');
+
+  // Validate dates whenever they change
+  useEffect(() => {
+    if (pickUpDate && dropOffDate) {
+      const pickup = new Date(pickUpDate);
+      const dropoff = new Date(dropOffDate);
+      
+      if (dropoff < pickup) {
+        setError('dropOffDate', {
+          type: 'manual',
+          message: 'Drop off date cannot be before pick up date'
+        });
+      } else {
+        clearErrors('dropOffDate');
+      }
+    }
+  }, [pickUpDate, dropOffDate, setError, clearErrors]);
 
   // Use auto-calculation hook
   const {
@@ -100,6 +207,16 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
     setValue,
     getValues
   });
+
+  // Display calculation errors as form validation errors
+  useEffect(() => {
+    if (calculationError && calculationError.includes('Drop off date cannot be before pick up date')) {
+      setError('dropOffDate', {
+        type: 'manual',
+        message: 'Drop off date must be on or after pick up date'
+      });
+    }
+  }, [calculationError, setError]);
 
   // Initialize selectedExtrasTypes when editing an existing booking
   useEffect(() => {
@@ -338,17 +455,22 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
   const calculationSummary = getCalculationSummary();
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[95vh] overflow-y-auto border-2 border-gray-300">
-        {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 rounded-t-lg">
+    <div className="fixed inset-0 bg-transparent bg-opacity-60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-7xl w-full max-h-[95vh] overflow-hidden">
+        {/* Professional Header */}
+        <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-8 py-6">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-bold text-gray-900">
-              {booking ? 'Edit Booking' : 'Add New Booking'}
-            </h2>
+            <div>
+              <h1 className="text-2xl font-bold text-white">
+                {booking ? 'Edit Booking' : 'Create New Booking'}
+              </h1>
+              <p className="text-slate-300 text-sm mt-1">
+                {booking ? 'Update existing booking details' : 'Add a new booking to the system'}
+              </p>
+            </div>
             <button
               onClick={onCancel}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
+              className="text-slate-400 hover:text-white transition-colors duration-200 p-2 hover:bg-slate-700 rounded-lg"
               aria-label="Close"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -358,605 +480,626 @@ export default function BookingForm({ booking, onSuccess, onCancel }: BookingFor
           </div>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-8">
-          {/* Auto-calculation Status */}
-          {(autoCalculating || calculationSummary) && (
-            <div className={`p-4 rounded-lg border ${
-              autoCalculating 
-                ? 'bg-blue-50 border-blue-200'
-                : 'bg-green-50 border-green-200'
-            }`}>
-              {autoCalculating && (
-                <div className="flex items-center space-x-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                  <span className="text-sm text-blue-800">
-                    Looking up vehicle group and calculating pricing...
-                  </span>
+        {/* Form Container - MOVED FORM TAG HERE TO INCLUDE FOOTER */}
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col h-[calc(95vh-140px)]">
+          {/* Scrollable Form Content */}
+          <div className="overflow-y-auto flex-1">
+            <div className="p-8 space-y-8">
+              {/* Status Banner */}
+              {(autoCalculating || calculationSummary || calculationError) && (
+                <div className={`rounded-xl border-l-4 p-4 ${
+                  calculationError
+                    ? 'bg-red-50 border-red-400'
+                    : autoCalculating 
+                    ? 'bg-blue-50 border-blue-400'
+                    : 'bg-green-50 border-green-400'
+                }`}>
+                  {calculationError && (
+                    <div className="flex items-center space-x-3">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-medium text-red-800">Date Validation Error</h3>
+                        <p className="text-xs text-red-700 mt-1">Please check your pickup and drop-off dates</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {autoCalculating && !calculationError && (
+                    <div className="flex items-center space-x-3">
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+                      <div>
+                        <h3 className="text-sm font-medium text-blue-800">Calculating Pricing</h3>
+                        <p className="text-xs text-blue-700 mt-1">Looking up vehicle group and calculating rates...</p>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {calculationSummary && !autoCalculating && !calculationError && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="flex-shrink-0">
+                          <svg className="h-5 w-5 text-green-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-medium text-green-800">Auto-calculated: {calculationSummary.calculation}</h3>
+                          <p className="text-xs text-green-700 mt-1">
+                            Vehicle: {calculationSummary.vehicle} | Group: {calculationSummary.group}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={recalculate}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium underline"
+                      >
+                        Recalculate
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-              
-              {calculationSummary && !autoCalculating && (
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-green-800">
-                    <span className="font-medium">✅ Auto-calculated:</span> {calculationSummary.calculation}
-                    <div className="text-xs text-green-600 mt-1">
-                      Vehicle: {calculationSummary.vehicle} | Group: {calculationSummary.group}
+
+              {/* Form Sections */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                
+                {/* Left Column */}
+                <div className="space-y-8">
+                  
+                  {/* Booking Information */}
+                  <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                    <div className="flex items-center space-x-2 mb-6">
+                      <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                          <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 102 0V3h4v1a1 1 0 102 0V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm2.707 4.707a1 1 0 00-1.414-1.414L4 9.586l-.293-.293a1 1 0 00-1.414 1.414l1 1a1 1 0 001.414 0l3-3z" clipRule="evenodd"/>
+                        </svg>
+                      </div>
+                      <h2 className="text-lg font-semibold text-slate-900">Booking Information</h2>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Booking Confirmation Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          {...register('bookingConfirmationDate', { required: 'Booking date is required' })}
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                        />
+                        {errors.bookingConfirmationDate && (
+                          <p className="text-red-600 text-xs mt-1">{errors.bookingConfirmationDate.message}</p>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Supplier</label>
+                          <input
+                            type="text"
+                            {...register('supplier')}
+                            placeholder="e.g., Fourways, Market Place"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Reference</label>
+                          <input
+                            type="text"
+                            {...register('reference')}
+                            placeholder="Supplier reference"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Coastr Reference <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            {...register('coastrReference', { required: 'Coastr reference is required' })}
+                            placeholder="e.g., CR2025001"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                          />
+                          {errors.coastrReference && (
+                            <p className="text-red-600 text-xs mt-1">{errors.coastrReference.message}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">SAGE INV</label>
+                          <input
+                            type="text"
+                            {...register('sageInv')}
+                            placeholder="Invoice reference"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Notes</label>
+                        <input
+                          type="text"
+                          {...register('notes')}
+                          placeholder="Booking notes"
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                        />
+                      </div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={recalculate}
-                    className="text-xs text-blue-600 hover:text-blue-700 underline"
-                  >
-                    Recalculate
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
 
-          {/* Booking Information Section */}
-          <div className="bg-blue-50 p-6 rounded-lg">
-            <h3 className="text-lg font-semibold text-blue-900 mb-4">📋 Booking Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Booking Confirmation Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Booking Confirmation Date *
-                </label>
-                <input
-                  type="date"
-                  {...register('bookingConfirmationDate', { required: 'Booking date is required' })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {errors.bookingConfirmationDate && (
-                  <p className="text-red-500 text-xs mt-1">{errors.bookingConfirmationDate.message}</p>
-                )}
-              </div>
+                  {/* Customer Information */}
+                  <div className="bg-green-50 rounded-xl p-6 border border-green-200">
+                    <div className="flex items-center space-x-2 mb-6">
+                      <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"/>
+                        </svg>
+                      </div>
+                      <h2 className="text-lg font-semibold text-slate-900">Customer Information</h2>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Customer Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          {...register('customerName', { required: 'Customer name is required' })}
+                          placeholder="Full name"
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
+                        />
+                        {errors.customerName && (
+                          <p className="text-red-600 text-xs mt-1">{errors.customerName.message}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Phone Number</label>
+                        <input
+                          type="tel"
+                          {...register('phoneNumber')}
+                          placeholder="e.g., 07123456789"
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
+                        />
+                      </div>
+                    </div>
+                  </div>
 
-              {/* Supplier */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Supplier
-                </label>
-                <input
-                  type="text"
-                  {...register('supplier')}
-                  placeholder="e.g., Fourways, Market Place"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Reference */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Reference
-                </label>
-                <input
-                  type="text"
-                  {...register('reference')}
-                  placeholder="Supplier reference number"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Coastr Reference */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Coastr Reference *
-                </label>
-                <input
-                  type="text"
-                  {...register('coastrReference', { required: 'Coastr reference is required' })}
-                  placeholder="e.g., CR2025001"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {errors.coastrReference && (
-                  <p className="text-red-500 text-xs mt-1">{errors.coastrReference.message}</p>
-                )}
-              </div>
-
-              {/* SAGE INV */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  SAGE INV
-                </label>
-                <input
-                  type="text"
-                  {...register('sageInv')}
-                  placeholder="Invoice reference"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes
-                </label>
-                <input
-                  type="text"
-                  {...register('notes')}
-                  placeholder="Booking notes"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Customer Information Section */}
-          <div className="bg-green-50 p-6 rounded-lg">
-            <h3 className="text-lg font-semibold text-green-900 mb-4">👤 Customer Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Customer Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Customer Name *
-                </label>
-                <input
-                  type="text"
-                  {...register('customerName', { required: 'Customer name is required' })}
-                  placeholder="Full name"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-                {errors.customerName && (
-                  <p className="text-red-500 text-xs mt-1">{errors.customerName.message}</p>
-                )}
-              </div>
-
-              {/* Phone Number */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone Number
-                </label>
-                <input
-                  type="tel"
-                  {...register('phoneNumber')}
-                  placeholder="e.g., 07123456789"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Vehicle Information Section */}
-          <div className="bg-purple-50 p-6 rounded-lg relative">
-            <h3 className="text-lg font-semibold text-purple-900 mb-4">🚗 Vehicle Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {/* Registration */}
-              <div className="relative">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Registration *
-                  {autoCalculating && (
-                    <span className="ml-2 text-xs text-blue-600">
-                      <span className="animate-spin inline-block">⏳</span> Auto-updating...
-                    </span>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  {...register('registration', { required: 'Registration is required' })}
-                  onChange={handleRegistrationChange}
-                  placeholder="e.g., AB12 CDE"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  style={{ textTransform: 'uppercase' }}
-                />
-                {errors.registration && (
-                  <p className="text-red-500 text-xs mt-1">{errors.registration.message}</p>
-                )}
-                
-                {/* Enhanced Vehicle Suggestions - Only Active Groups */}
-                {showSuggestions && vehicleSuggestions.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                    {vehicleSuggestions.map((vehicle, index) => (
-                      <div
-                        key={index}
-                        onClick={() => selectVehicle(vehicle)}
-                        className="px-3 py-2 cursor-pointer hover:bg-purple-50 border-b border-gray-100 last:border-b-0"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-medium">{vehicle.registration}</div>
-                            <div className="text-sm text-gray-600">
-                              {vehicle.make} {vehicle.model}
-                            </div>
+                  {/* Vehicle Information */}
+                  <div className="bg-purple-50 rounded-xl p-6 border border-purple-200 relative">
+                    <div className="flex items-center space-x-2 mb-6">
+                      <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M8 2a2 2 0 00-2 2v1.5H4a2 2 0 00-2 2v7a2 2 0 002 2h12a2 2 0 002-2v-7a2 2 0 00-2-2h-2V4a2 2 0 00-2-2H8zm2 14a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd"/>
+                        </svg>
+                      </div>
+                      <h2 className="text-lg font-semibold text-slate-900">Vehicle Information</h2>
+                      {autoCalculating && (
+                        <div className="flex items-center text-blue-600 text-sm">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                          Auto-updating
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      <div className="relative">
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Registration <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          {...register('registration', { required: 'Registration is required' })}
+                          onChange={handleRegistrationChange}
+                          placeholder="e.g., AB12 CDE"
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 uppercase"
+                        />
+                        {errors.registration && (
+                          <p className="text-red-600 text-xs mt-1">{errors.registration.message}</p>
+                        )}
+                        
+                        {/* Vehicle Suggestions */}
+                        {showSuggestions && vehicleSuggestions.length > 0 && (
+                          <div className="absolute z-20 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {vehicleSuggestions.map((vehicle, index) => (
+                              <div
+                                key={index}
+                                onClick={() => selectVehicle(vehicle)}
+                                className="px-4 py-3 cursor-pointer hover:bg-purple-50 border-b border-slate-100 last:border-b-0"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <div className="font-semibold text-slate-900">{vehicle.registration}</div>
+                                    <div className="text-sm text-slate-600">
+                                      {vehicle.make} {vehicle.model}
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className={`text-xs px-3 py-1 rounded-full font-medium ${
+                                      vehicle.groupStatus === 'active' 
+                                        ? 'bg-green-100 text-green-800' 
+                                        : 'bg-yellow-100 text-yellow-800'
+                                    }`}>
+                                      {vehicle.groupName}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                          <div className="text-right">
-                            <div className={`text-xs px-2 py-0.5 rounded-full ${
-                              vehicle.groupStatus === 'active' 
-                                ? 'bg-green-100 text-green-700' 
-                                : 'bg-yellow-100 text-yellow-700'
-                            }`}>
-                              {vehicle.groupName}
-                            </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Vehicle Group</label>
+                        <input
+                          type="text"
+                          {...register('group')}
+                          placeholder="Auto-populated from active vehicle groups"
+                          className="w-full px-4 py-2.5 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-600 shadow-sm"
+                          readOnly
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Only vehicles from active groups are shown</p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Make</label>
+                          <input
+                            type="text"
+                            {...register('make')}
+                            placeholder="e.g., Ford"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Model</label>
+                          <input
+                            type="text"
+                            {...register('model')}
+                            placeholder="e.g., Transit"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column */}
+                <div className="space-y-8">
+                  
+                  {/* Rental Period */}
+                  <div className="bg-orange-50 rounded-xl p-6 border border-orange-200">
+                    <div className="flex items-center space-x-2 mb-6">
+                      <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd"/>
+                        </svg>
+                      </div>
+                      <h2 className="text-lg font-semibold text-slate-900">Rental Period</h2>
+                    </div>
+                    
+                    <div className="space-y-6">
+                      {/* Pick Up */}
+                      <div className="bg-white rounded-lg p-4 border border-orange-200">
+                        <h3 className="text-sm font-semibold text-orange-800 mb-4">Pick Up Details</h3>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                              Date <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              {...register('pickUpDate', { required: 'Pick up date is required' })}
+                              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
+                            />
+                            {errors.pickUpDate && (
+                              <p className="text-red-600 text-xs mt-1">{errors.pickUpDate.message}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Time</label>
+                            <TimeSeparate
+                              value={pickUpTime}
+                              onChange={(value) => setValue('pickUpTime', value)}
+                            />
+                            <p className="text-xs text-slate-500 mt-1">15-minute intervals only</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Location</label>
+                            <input
+                              type="text"
+                              {...register('pickUpLocation')}
+                              placeholder="e.g., Depot A, Terminal 1"
+                              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
+                            />
                           </div>
                         </div>
                       </div>
-                    ))}
+
+                      {/* Drop Off */}
+                      <div className="bg-white rounded-lg p-4 border border-orange-200">
+                        <h3 className="text-sm font-semibold text-orange-800 mb-4">Drop Off Details</h3>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
+                              Date <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              {...register('dropOffDate', { required: 'Drop off date is required' })}
+                              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
+                            />
+                            {errors.dropOffDate && (
+                              <p className="text-red-600 text-xs mt-1">{errors.dropOffDate.message}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Time</label>
+                            <TimeSeparate
+                              value={dropOffTime}
+                              onChange={(value) => setValue('dropOffTime', value)}
+                            />
+                            <p className="text-xs text-slate-500 mt-1">15-minute intervals only</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Location</label>
+                            <input
+                              type="text"
+                              {...register('dropOffLocation')}
+                              placeholder="e.g., Depot A, Terminal 1"
+                              className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-200"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Rental Summary */}
+                      {pickUpDate && dropOffDate && (
+                        <div className="bg-gradient-to-r from-orange-100 to-orange-50 rounded-lg p-4 border border-orange-200">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm font-medium text-orange-900">
+                              Duration: {calculateDays(pickUpDate, dropOffDate)} day{calculateDays(pickUpDate, dropOffDate) !== 1 ? 's' : ''}
+                            </span>
+                            {vehicleInfo?.group && (
+                              <span className="text-sm text-orange-800">
+                                <span className="font-medium">{vehicleInfo.group.name}</span>
+                                <span className="ml-2 text-orange-600 text-xs">
+                                  (£{vehicleInfo.group.dailyRate}/day)
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                          {pickUpTime && dropOffTime && (
+                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-orange-200">
+                              <span className="text-xs text-orange-700">Time:</span>
+                              <span className="text-xs text-orange-800 font-medium">
+                                {pickUpTime} - {dropOffTime}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
+
+                  {/* Financial Information */}
+                  <div className="bg-yellow-50 rounded-xl p-6 border border-yellow-200">
+                    <div className="flex items-center space-x-2 mb-6">
+                      <div className="w-8 h-8 bg-yellow-600 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path d="M8.433 7.418c.155-.103.346-.196.567-.267v1.698a2.305 2.305 0 01-.567-.267C8.07 8.34 8 8.114 8 8c0-.114.07-.34.433-.582zM11 12.849v-1.698c.22.071.412.164.567.267.364.243.433.468.433.582 0 .114-.07.34-.433.582a2.305 2.305 0 01-.567.267z"/>
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.51-1.31c-.562-.649-1.413-1.076-2.353-1.253V5z" clipRule="evenodd"/>
+                        </svg>
+                      </div>
+                      <h2 className="text-lg font-semibold text-slate-900">Financial Information</h2>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Hire Charge (Inc. VAT) <span className="text-red-500">*</span>
+                            <span className="text-xs text-blue-600 ml-1">(Auto-calculated)</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            {...register('hireChargeInclVat', { required: 'Hire charge is required' })}
+                            placeholder="0.00"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-200"
+                          />
+                          {errors.hireChargeInclVat && (
+                            <p className="text-red-600 text-xs mt-1">{errors.hireChargeInclVat.message}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Insurance</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            {...register('insurance')}
+                            placeholder="0.00"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Additional Income</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            {...register('additionalIncome')}
+                            placeholder="0.00"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Charges Income</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            {...register('chargesIncome')}
+                            placeholder="0.00"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Additional Income Reason</label>
+                        <input
+                          type="text"
+                          {...register('additionalIncomeReason')}
+                          placeholder="Reason for additional charge"
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-200"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">
+                          Extras Type <span className="text-xs text-blue-600 ml-1">(Multi-select)</span>
+                        </label>
+                        <ExtrasTypeDropdown
+                          value={selectedExtrasTypes}
+                          onChange={handleExtrasTypeChange}
+                          className="w-full"
+                        />
+                        {selectedExtrasTypes.length > 0 && pricing?.numberOfDays && (
+                          <p className="text-xs text-green-600 mt-1">
+                            Total for {pricing.numberOfDays} day{pricing.numberOfDays !== 1 ? 's' : ''}: {formatCurrency(calculateExtrasTotal())}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Extras <span className="text-xs text-blue-600 ml-1">(Auto-calculated)</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            {...register('extras')}
+                            placeholder="0.00"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">
+                            Paid To Us <span className="text-xs text-blue-600 ml-1">(Auto-calculated)</span>
+                          </label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            {...register('paidToUs')}
+                            placeholder="0.00"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Deposit @ Branch</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            {...register('depositToBeCollectedAtBranch')}
+                            placeholder="0.00"
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-200"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Deposit Status</label>
+                          <select
+                            {...register('depositToBeCollectedStatus')}
+                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-200"
+                          >
+                            <option value="">Select status</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Deposit Returned Date</label>
+                        <input
+                          type="date"
+                          {...register('returnedDate')}
+                          className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition-all duration-200"
+                        />
+                      </div>
+
+                      {/* Hidden Legacy Field */}
+                      <input type="hidden" {...register('extrasType')} />
+                    </div>
+                  </div>
+
+                  {/* Comments */}
+                  <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
+                    <div className="flex items-center space-x-2 mb-4">
+                      <div className="w-8 h-8 bg-slate-600 rounded-lg flex items-center justify-center">
+                        <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clipRule="evenodd"/>
+                        </svg>
+                      </div>
+                      <h2 className="text-lg font-semibold text-slate-900">Additional Comments</h2>
+                    </div>
+                    
+                    <div>
+                      <textarea
+                        {...register('comments')}
+                        rows={4}
+                        placeholder="Any additional notes or comments about this booking..."
+                        className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-500 focus:border-transparent transition-all duration-200 resize-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Fixed Footer with Actions - NOW INSIDE FORM */}
+          <div className="bg-slate-50 border-t border-slate-200 px-8 py-4">
+            <div className="flex justify-end space-x-4">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="px-6 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 transition-all duration-200 font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="px-8 py-2.5 text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg"
+              >
+                {isLoading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    {booking ? 'Updating...' : 'Creating...'}
+                  </div>
+                ) : (
+                  booking ? 'Update Booking' : 'Create Booking'
                 )}
-              </div>
-
-              {/* Group (Auto-populated from ACTIVE groups only) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Vehicle Group
-                  {autoCalculating && (
-                    <span className="ml-2 text-xs text-blue-600">Auto-updating...</span>
-                  )}
-                </label>
-                <input
-                  type="text"
-                  {...register('group')}
-                  placeholder="Auto-populated from active vehicle groups"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 bg-gray-50"
-                  readOnly
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Only vehicles from active groups are shown
-                </p>
-              </div>
-
-              {/* Make */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Make
-                </label>
-                <input
-                  type="text"
-                  {...register('make')}
-                  placeholder="e.g., Ford"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
-
-              {/* Model */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Model
-                </label>
-                <input
-                  type="text"
-                  {...register('model')}
-                  placeholder="e.g., Transit"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500"
-                />
-              </div>
+              </button>
             </div>
-          </div>
-
-          {/* Rental Period Section */}
-          <div className="bg-orange-50 p-6 rounded-lg">
-            <h3 className="text-lg font-semibold text-orange-900 mb-4">📅 Rental Period</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Pick Up Details */}
-              <div className="space-y-4">
-                <h4 className="font-medium text-orange-800">Pick Up</h4>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Pick Up Date *
-                  </label>
-                  <input
-                    type="date"
-                    {...register('pickUpDate', { required: 'Pick up date is required' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                  {errors.pickUpDate && (
-                    <p className="text-red-500 text-xs mt-1">{errors.pickUpDate.message}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Pick Up Time
-                  </label>
-                  <input
-                    type="time"
-                    {...register('pickUpTime')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Pick Up Location
-                  </label>
-                  <input
-                    type="text"
-                    {...register('pickUpLocation')}
-                    placeholder="e.g., Depot A, Terminal 1"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-              </div>
-
-              {/* Drop Off Details */}
-              <div className="space-y-4">
-                <h4 className="font-medium text-orange-800">Drop Off</h4>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Drop Off Date *
-                  </label>
-                  <input
-                    type="date"
-                    {...register('dropOffDate', { required: 'Drop off date is required' })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                  {errors.dropOffDate && (
-                    <p className="text-red-500 text-xs mt-1">{errors.dropOffDate.message}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Drop Off Time
-                  </label>
-                  <input
-                    type="time"
-                    {...register('dropOffTime')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Drop Off Location
-                  </label>
-                  <input
-                    type="text"
-                    {...register('dropOffLocation')}
-                    placeholder="e.g., Depot A, Terminal 1"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Rental Period Summary */}
-            {pickUpDate && dropOffDate && (
-              <div className="mt-4 p-4 bg-orange-100 rounded-lg">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium text-orange-800">
-                    Rental Period: {calculateDays(pickUpDate, dropOffDate)} days
-                  </span>
-                  {vehicleInfo?.group && (
-                    <span className="text-sm text-orange-700">
-                      Group: <span className="font-medium">{vehicleInfo.group.name}</span>
-                      <span className="ml-2 text-orange-600">
-                        (£{vehicleInfo.group.dailyRate}/day)
-                      </span>
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Financial Information Section */}
-          <div className="bg-yellow-50 p-6 rounded-lg">
-            <h3 className="text-lg font-semibold text-yellow-900 mb-4">💰 Financial Information</h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Hire Charge (Auto-calculated) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hire Charge (Inc. VAT) *
-                  <span className="text-xs text-blue-600 ml-1">(Auto-calculated)</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register('hireChargeInclVat', { required: 'Hire charge is required' })}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-                {errors.hireChargeInclVat && (
-                  <p className="text-red-500 text-xs mt-1">{errors.hireChargeInclVat.message}</p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">
-                  Automatically calculated from group daily rate × number of days
-                </p>
-              </div>
-
-              {/* Insurance */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Insurance
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register('insurance')}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-              </div>
-
-              {/* Additional Income */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Additional Income
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register('additionalIncome')}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-              </div>
-
-              {/* Additional Income Reason */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Additional Income Reason
-                </label>
-                <input
-                  type="text"
-                  {...register('additionalIncomeReason')}
-                  placeholder="Reason for additional charge"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-              </div>
-
-              {/* NEW: Extras Type Dropdown - POSITIONED BEFORE EXTRAS AMOUNT */}
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Extras Type
-                  <span className="text-xs text-blue-600 ml-1">(Multi-select)</span>
-                </label>
-                <ExtrasTypeDropdown
-                  value={selectedExtrasTypes}
-                  onChange={handleExtrasTypeChange}
-                  className="w-full"
-                />
-                {selectedExtrasTypes.length > 0 && pricing?.numberOfDays && (
-                  <p className="text-xs text-green-600 mt-1">
-                    Total for {pricing.numberOfDays} day{pricing.numberOfDays !== 1 ? 's' : ''}: {formatCurrency(calculateExtrasTotal())}
-                  </p>
-                )}
-              </div>
-
-              {/* Extras Amount - NOW AUTO-CALCULATED */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Extras
-                  <span className="text-xs text-blue-600 ml-1">(Auto-calculated)</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register('extras')}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Calculated from selected extras × number of days. You can manually adjust this amount.
-                </p>
-              </div>
-
-              {/* Hidden Legacy Extras Type Field - for backwards compatibility */}
-              <input
-                type="hidden"
-                {...register('extrasType')}
-              />
-
-              {/* Deposit To Be Collected At Branch */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Deposit To Be Collected At Branch
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register('depositToBeCollectedAtBranch')}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-              </div>
-
-              {/* Deposit Status */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Deposit Status
-                </label>
-                <select
-                  {...register('depositToBeCollectedStatus')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                >
-                  <option value="">Select status</option>
-                  <option value="Yes">Yes</option>
-                  <option value="No">No</option>
-                </select>
-              </div>
-
-              {/* Charges Income */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Charges Income
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register('chargesIncome')}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-              </div>
-
-              {/* Paid To Us (Auto-calculated) */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Paid To Us
-                  <span className="text-xs text-blue-600 ml-1">(Auto-calculated)</span>
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  {...register('paidToUs')}
-                  placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Sum of hire charge, insurance, additional income, extras, and charges income. You can manually adjust this amount.
-                </p>
-              </div>
-
-              {/* Returned Date */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Returned Date
-                </label>
-                <input
-                  type="date"
-                  {...register('returnedDate')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Comments Section */}
-          <div className="bg-gray-50 p-6 rounded-lg">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">💬 Additional Comments</h3>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Comments
-              </label>
-              <textarea
-                {...register('comments')}
-                rows={3}
-                placeholder="Any additional notes or comments about this booking..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-500"
-              />
-            </div>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="px-6 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-200"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="px-6 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium"
-            >
-              {isLoading ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  {booking ? 'Updating...' : 'Creating...'}
-                </div>
-              ) : (
-                booking ? 'Update Booking' : 'Create Booking'
-              )}
-            </button>
           </div>
         </form>
       </div>

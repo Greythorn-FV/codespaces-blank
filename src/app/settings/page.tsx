@@ -9,9 +9,12 @@ import GroupPricingCard from '@/components/GroupPricingCard';
 import PricingModal from '@/components/PricingModal';
 import GroupFormModal from '@/components/GroupFormModal';
 import ExtrasTypesSection from '@/components/ExtrasTypesSection';
+import AuthGuard from '@/components/AuthGuard';
+import { useAuth } from '@/contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 
-export default function SettingsPage() {
+function SettingsPage() {
+  const { user, hasPermission } = useAuth();
   const [groups, setGroups] = useState<VehicleGroup[]>([]);
   const [filteredGroups, setFilteredGroups] = useState<VehicleGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -345,26 +348,53 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* User Management Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-purple-50 to-violet-50 px-6 py-4 border-b border-gray-100">
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
-                <span className="text-white text-sm">👥</span>
+        {/* User Management Section - Admin Only */}
+        {hasPermission('canManageUsers') && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-red-50 to-orange-50 px-6 py-4 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center">
+                    <span className="text-white text-sm">👥</span>
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">User Management</h2>
+                    <p className="text-sm text-gray-600">Manage system users and permissions</p>
+                  </div>
+                </div>
+                <a
+                  href="/admin/users"
+                  className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 shadow-sm transition-all duration-200 flex items-center space-x-2 font-medium"
+                >
+                  <span>👤</span>
+                  <span>Manage Users</span>
+                </a>
               </div>
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">User Management</h2>
-                <p className="text-sm text-gray-600">User roles and permissions settings</p>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-red-800 mb-2">User Accounts</h3>
+                  <p className="text-red-700 text-sm mb-3">Create and manage user accounts with role-based permissions</p>
+                  <ul className="text-red-600 text-sm space-y-1">
+                    <li>• Create admin and member users</li>
+                    <li>• Assign permissions and roles</li>
+                    <li>• Activate/deactivate accounts</li>
+                  </ul>
+                </div>
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-orange-800 mb-2">Security Features</h3>
+                  <p className="text-orange-700 text-sm mb-3">Advanced security and email validation</p>
+                  <ul className="text-orange-600 text-sm space-y-1">
+                    <li>• Blocks fake email addresses</li>
+                    <li>• Strong password requirements</li>
+                    <li>• Secure password reset flow</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
-          <div className="p-6">
-            <div className="text-center py-8 text-gray-500">
-              <div className="text-3xl mb-2">👤</div>
-              <p className="text-sm">User management features coming soon...</p>
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* Pricing Modal */}
@@ -391,5 +421,14 @@ export default function SettingsPage() {
         />
       )}
     </div>
+  );
+}
+
+// Export with AuthGuard protection - THIS IS THE KEY ADDITION
+export default function ProtectedSettingsPage() {
+  return (
+    <AuthGuard requiredPermission="canManageSettings">
+      <SettingsPage />
+    </AuthGuard>
   );
 }

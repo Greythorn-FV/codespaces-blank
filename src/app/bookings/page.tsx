@@ -11,10 +11,13 @@ import BookingTable from '@/components/BookingTable';
 import BookingBulkUploadModal from '@/components/BookingBulkUploadModal';
 import DepositReturnedModal from '@/components/DepositReturnedModal';
 import NextDayOperationsModal from '@/components/NextDayOperationsModal';
+import AuthGuard from '@/components/AuthGuard';
+import { useAuth } from '@/contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 import { DocumentSnapshot } from 'firebase/firestore';
 
-export default function BookingsPage() {
+function BookingsPage() {
+  const { user } = useAuth();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -545,5 +548,14 @@ export default function BookingsPage() {
         onClose={() => setShowNextDayOps(false)}
       />
     </div>
+  );
+}
+
+// Export with AuthGuard protection - THIS IS THE KEY ADDITION
+export default function ProtectedBookingsPage() {
+  return (
+    <AuthGuard requiredPermission="canManageBookings">
+      <BookingsPage />
+    </AuthGuard>
   );
 }

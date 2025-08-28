@@ -35,8 +35,13 @@ export default function BookingTable({
   };
 
   const formatCurrency = (amount: number | null | undefined) => {
-    if (!amount && amount !== 0) return '-';
-    return `£${amount.toFixed(2)}`;
+    // Handle null, undefined, or empty values
+    if (amount === null || amount === undefined) return '-';
+    // Handle zero and positive values
+    if (typeof amount === 'number') {
+      return `£${amount.toFixed(2)}`;
+    }
+    return '-';
   };
 
   const formatReturnedDate = (returnedDate: Date | string | null | undefined) => {
@@ -60,16 +65,16 @@ export default function BookingTable({
     if (sortField !== field) {
       return <span className="text-gray-400 ml-1 text-xs">⇅</span>;
     }
-    return sortDirection === 'asc' ?
-      <span className="text-indigo-600 ml-1 text-xs">↑</span> : 
-      <span className="text-indigo-600 ml-1 text-xs">↓</span>;
+    return sortDirection === 'asc' ? 
+      <span className="text-gray-600 ml-1 text-xs">↑</span> : 
+      <span className="text-gray-600 ml-1 text-xs">↓</span>;
   };
 
   const getCellContent = (booking: Booking, columnKey: ColumnKey) => {
     switch (columnKey) {
       case 'bookingConfirmationDate':
         return (
-          <div className="text-xs font-medium text-gray-800 text-center whitespace-nowrap">
+          <div className="text-xs text-center whitespace-nowrap">
             {formatDate(booking.bookingConfirmationDate)}
           </div>
         );
@@ -87,10 +92,8 @@ export default function BookingTable({
         );
       case 'coastrReference':
         return (
-          <div className="flex justify-center">
-            <div className="text-xs font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded whitespace-nowrap">
-              {booking.coastrReference}
-            </div>
+          <div className="text-xs font-medium text-gray-900 text-center whitespace-nowrap">
+            {booking.coastrReference || '-'}
           </div>
         );
       case 'sageInv':
@@ -101,14 +104,16 @@ export default function BookingTable({
         );
       case 'notes':
         return (
-          <div className="text-xs text-gray-600 max-w-32 truncate text-center mx-auto" title={booking.notes || '-'}>
+          <div className="text-xs text-gray-600 max-w-32 truncate text-center mx-auto" 
+               title={booking.notes || '-'}>
             {booking.notes || '-'}
           </div>
         );
       case 'customerName':
         return (
-          <div className="text-xs font-medium text-gray-800 text-center whitespace-nowrap">
-            {booking.customerName}
+          <div className="text-xs text-gray-900 max-w-32 truncate text-center mx-auto" 
+               title={booking.customerName || '-'}>
+            {booking.customerName || '-'}
           </div>
         );
       case 'phoneNumber':
@@ -119,29 +124,26 @@ export default function BookingTable({
         );
       case 'group':
         return (
-          <div className="flex justify-center">
-            <div className="text-xs text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded whitespace-nowrap">
-              {booking.group || 'Unassigned'}
-            </div>
+          <div className="text-xs text-gray-600 text-center whitespace-nowrap">
+            {booking.group || '-'}
           </div>
         );
       case 'registration':
         return (
-          <div className="flex justify-center">
-            <div className="text-xs font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded whitespace-nowrap">
-              {booking.registration}
-            </div>
+          <div className="text-xs font-medium text-gray-900 text-center whitespace-nowrap">
+            {booking.registration || '-'}
           </div>
         );
       case 'makeModel':
         return (
-          <div className="text-xs text-gray-700 text-center whitespace-nowrap">
-            {booking.makeModel || `${booking.make || ''} ${booking.model || ''}`.trim() || '-'}
+          <div className="text-xs text-gray-600 max-w-32 truncate text-center mx-auto" 
+               title={booking.makeModel || (booking.make && booking.model ? `${booking.make} ${booking.model}` : booking.make || booking.model || '-')}>
+            {booking.makeModel || (booking.make && booking.model ? `${booking.make} ${booking.model}` : booking.make || booking.model || '-')}
           </div>
         );
       case 'pickUpDate':
         return (
-          <div className="text-xs text-gray-700 text-center whitespace-nowrap">
+          <div className="text-xs text-center whitespace-nowrap">
             {formatDate(booking.pickUpDate)}
           </div>
         );
@@ -160,7 +162,7 @@ export default function BookingTable({
         );
       case 'dropOffDate':
         return (
-          <div className="text-xs text-gray-700 text-center whitespace-nowrap">
+          <div className="text-xs text-center whitespace-nowrap">
             {formatDate(booking.dropOffDate)}
           </div>
         );
@@ -179,25 +181,25 @@ export default function BookingTable({
         );
       case 'noOfDays':
         return (
-          <div className="text-xs text-gray-700 text-center whitespace-nowrap">
+          <div className="text-xs text-center whitespace-nowrap">
             {booking.noOfDays || '-'}
           </div>
         );
       case 'hireChargeInclVat':
         return (
-          <div className="text-xs text-green-700 text-center font-medium whitespace-nowrap">
+          <div className="text-xs text-center whitespace-nowrap">
             {formatCurrency(booking.hireChargeInclVat)}
           </div>
         );
       case 'insurance':
         return (
-          <div className="text-xs text-blue-700 text-center whitespace-nowrap">
+          <div className="text-xs text-center whitespace-nowrap">
             {formatCurrency(booking.insurance)}
           </div>
         );
       case 'additionalIncome':
         return (
-          <div className="text-xs text-purple-700 text-center whitespace-nowrap">
+          <div className="text-xs text-center whitespace-nowrap">
             {formatCurrency(booking.additionalIncome)}
           </div>
         );
@@ -210,26 +212,26 @@ export default function BookingTable({
         );
       case 'extras':
         return (
-          <div className="text-xs text-orange-700 text-center whitespace-nowrap">
+          <div className="text-xs text-center whitespace-nowrap">
             {formatCurrency(booking.extras)}
           </div>
         );
       case 'extrasType':
         return (
-          <div className="text-xs text-gray-600 max-w-32 truncate text-center mx-auto" 
+          <div className="text-xs text-gray-600 max-w-28 truncate text-center mx-auto" 
                title={booking.extrasType || '-'}>
             {booking.extrasType || '-'}
           </div>
         );
       case 'depositToBeCollectedAtBranch':
         return (
-          <div className="text-xs text-red-700 text-center font-medium whitespace-nowrap">
+          <div className="text-xs text-orange-700 text-center font-semibold whitespace-nowrap">
             {formatCurrency(booking.depositToBeCollectedAtBranch)}
           </div>
         );
       case 'chargesIncome':
         return (
-          <div className="text-xs text-gray-700 text-center whitespace-nowrap">
+          <div className="text-xs text-center whitespace-nowrap">
             {formatCurrency(booking.chargesIncome)}
           </div>
         );
@@ -260,27 +262,40 @@ export default function BookingTable({
         );
       case 'actions':
         return (
-          <div className="flex space-x-1 justify-center">
+          <div className="flex space-x-1 justify-center items-center">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onEdit(booking);
               }}
               className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors duration-200"
+              title="Edit booking details"
             >
               Edit
             </button>
-            {booking.depositToBeCollectedAtBranch && booking.depositToBeCollectedAtBranch > 0 && (!booking.returnedDate || booking.returnedDate === '') && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDepositReturned(booking);
-                }}
-                className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors duration-200"
-              >
-                Return
-              </button>
-            )}
+            {/* Conditional Mark Returned Button */}
+            {(() => {
+              // Only show if deposit exists, is greater than 0, and hasn't been returned
+              const hasDeposit = booking.depositToBeCollectedAtBranch && 
+                                booking.depositToBeCollectedAtBranch > 0;
+              const notReturned = !booking.returnedDate || booking.returnedDate === '';
+              
+              if (hasDeposit && notReturned) {
+                return (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDepositReturned(booking);
+                    }}
+                    className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors duration-200 whitespace-nowrap"
+                    title="Mark deposit as returned to customer"
+                  >
+                    Mark Returned
+                  </button>
+                );
+              }
+              return null;
+            })()}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -289,6 +304,7 @@ export default function BookingTable({
                 }
               }}
               className="px-2 py-1 text-xs bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors duration-200"
+              title="Delete this booking"
             >
               Delete
             </button>
@@ -393,7 +409,7 @@ function getColumnWidth(columnKey: ColumnKey): string {
     deposit: '80px',
     returnedDate: '120px',
     comments: '160px',
-    actions: '140px'
+    actions: '180px' // Increased width for "Mark Returned" button
   };
   
   return widthMap[columnKey as string] || '100px';
